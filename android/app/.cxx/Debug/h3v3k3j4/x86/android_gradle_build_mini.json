@@ -1,0 +1,20 @@
+{
+  "buildFiles": [
+    "/Users/thabangsoulo/sdks/flutter/packages/flutter_tools/gradle/src/main/groovy/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/Users/thabangsoulo/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/Users/thabangsoulo/Documents/workspace/onebus/android/app/.cxx/Debug/h3v3k3j4/x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/Users/thabangsoulo/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/Users/thabangsoulo/Documents/workspace/onebus/android/app/.cxx/Debug/h3v3k3j4/x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {}
+}

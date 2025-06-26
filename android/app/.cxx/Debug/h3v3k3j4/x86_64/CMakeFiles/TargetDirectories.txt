@@ -1,0 +1,2 @@
+/Users/thabangsoulo/Documents/workspace/onebus/android/app/.cxx/Debug/h3v3k3j4/x86_64/CMakeFiles/edit_cache.dir
+/Users/thabangsoulo/Documents/workspace/onebus/android/app/.cxx/Debug/h3v3k3j4/x86_64/CMakeFiles/rebuild_cache.dir

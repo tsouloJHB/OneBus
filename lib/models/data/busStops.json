@@ -1,0 +1,1081 @@
+{
+  "bus_stops": [
+    {
+      "coordinates": {
+        "latitude": -26.1742,
+        "longitude": 27.95722
+      },
+      "street_direction": "North",
+      "type": "Bus stop",
+      "address": "Main road and 17 street",
+      "bus_numbers": ["C5", "T1"],
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.173968,
+        "longitude": 27.957238
+      },
+      "street_direction": "South",
+      "type": "Bus stop",
+      "address": "Main road and 17 street",
+      "bus_numbers": ["C5", "C4"],
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.17389,
+        "longitude": 27.95929
+      },
+      "street_direction": "East",
+      "type": "Bus stop",
+      "address": "Main",
+      "bus_numbers": ["C5"],
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.174224,
+        "longitude": 27.962762
+      },
+      "street_direction": "East",
+      "type": "Bus stop",
+      "address": "105 Main Rd, Newlands, Randburg, 2092",
+      "bus_numbers": ["C5"],
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.174552346900654,
+        "longitude": 27.963046699748087
+      },
+      "street_direction": "East",
+      "type": "Bus stop",
+      "address": "Main Rd & Ackerman Rd",
+      "bus_numbers": ["C5"],
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.175765,
+        "longitude": 27.967466
+      },
+      "street_direction": "East",
+      "type": "Bus stop",
+      "address": "Main Rd & Ackerman Rd",
+      "bus_numbers": ["C5"],
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.175628540597433,
+        "longitude": 27.967844191223826
+      },
+      "street_direction": "East",
+      "address": "149 Main Rd, Newlands, Randburg, 2092",
+      "bus_numbers": ["C5"],
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.174218504355338,
+        "longitude": 27.962761385665004
+      },
+      "street_direction": "East",
+      "address": "105 Main Rd, Newlands, Randburg, 2092",
+      "bus_numbers": ["C5"],
+      "cbd":"To",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.174565126136343,
+        "longitude": 27.963044813663775
+      },
+      "street_direction": "East",
+      "address": "100 Main Rd, Newland",
+      "bus_numbers": ["C5"],
+      "cbd":"From",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.175744596678115,
+        "longitude": 27.96747044376172
+      },
+      "street_direction": "East",
+      "address": "140-136 Main Rd, Newlands, Randburg, 2092",
+      "bus_numbers": ["C5"],
+      "cbd":"From",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.175635545564255,
+        "longitude": 27.96784838499146
+      },
+      "street_direction": "East",
+      "address": "149 Main Rd, Newlands, Randburg, 2092",
+      "bus_numbers": ["C5"],
+      "cbd":"To",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.17709392023225,
+        "longitude": 27.971672787401296
+      },
+      "street_direction": "East",
+      "address": "Martindale, Johannesburg, 2092",
+      "bus_numbers": ["C5"],
+      "cbd":"From",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.177320166469546,
+        "longitude": 27.9724908735137
+      },
+      "street_direction": "East",
+      "address": "Main Rd, Martindale, Johannesburg, 2092",
+      "bus_numbers": ["C5"],
+      "cbd":"To",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.178307106637636,
+        "longitude": 27.973772995629712
+      },
+      "street_direction": "East",
+      "address": "Main Rd, Martindale, Johannesburg, 2092",
+      "bus_numbers": ["C5"],
+      "cbd":"From",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.181111316139788,
+        "longitude": 27.978598293763316
+      },
+      "street_direction": "East",
+      "address": "Westbury, Johannesburg, 2093",
+      "bus_numbers": ["C5"],
+      "cbd":"From",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18293584803714,
+        "longitude":  27.98072265670588
+      },
+      "street_direction": "East",
+      "address": "Perthweg, Westdene, Johannesburg, 2092",
+      "bus_numbers": ["C5"],
+      "cbd":"From",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.184884497848433,
+        "longitude": 27.98219597687166
+      },
+      "street_direction": "East",
+      "address": "17 Perth Rd, Westdene, Johannesburg, 2092",
+      "bus_numbers": ["C5"],
+      "cbd":"To",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18325257720585,
+        "longitude": 27.98120626459567
+      },
+      "street_direction": "East",
+      "address": "7-9 Perthweg, Westdene, Johannesburg, 2092",
+      "bus_numbers": ["C5"],
+      "cbd":"To",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.185182980965855,
+        "longitude": 27.98212629738987
+      },
+      "street_direction": "East",
+      "address": "Laurence Wessenaar St, Westbury, Johannesburg, 2093",
+      "bus_numbers": ["C5"],
+      "cbd":"From",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.183228593047158,
+        "longitude": 27.99049990028975
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Helen Joseph Hospital Station",
+      "bus_numbers": ["C5","T1","C6"],
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        }
+      },
+      "cbd":"From-to"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18197145871311,
+        "longitude": 27.99895649341298
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "UJ Kingsway Campus Station",
+      "bus_numbers": ["C5","T1","C6"],
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        }
+      },
+      "cbd":"From-to"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18298,
+        "longitude": 28.00357
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "UJ Sophiatown Residence Bus Station",
+      "bus_numbers": ["C5","T1","C6","C4"],
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        }
+      },
+      "cbd":"to"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.1832,
+        "longitude":28.00452
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "UJ Sophiatown Residence Bus Station",
+      "bus_numbers": ["C5","T1","C6","C4"],
+      "cbd":"From",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18431795404072,
+        "longitude":28.009881744859076
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "SABC Media Park Bus Station",
+      "bus_numbers": ["C5","T1","C6","C4"],
+      "cbd":"From",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18446,
+        "longitude":28.01128
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "SABC Media Park Bus Station",
+      "bus_numbers": ["C5","T1","C6","C4"],
+      "cbd":"To",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18318,
+        "longitude":28.02023
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "SABC Media Park Bus Station",
+      "bus_numbers": ["C5","T1","C6","C4"],
+      "cbd":"From-to",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18542,
+        "longitude":28.02887
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Wits Bus Station",
+      "bus_numbers": ["C5","T1","C6","C4"],
+      "cbd":"to",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.185220597453053,
+        "longitude": 28.028090695335067
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Wits Bus Station",
+      "bus_numbers": ["C5","T1","C6","C4"],
+      "cbd":"to",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.185220597453053,
+        "longitude": 28.028090695335067
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Wits Bus Station",
+      "bus_numbers": ["C5","T1","C6","C4"],
+      "cbd":"to",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18524,
+        "longitude": 28.03937
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Wits Bus Station",
+      "bus_numbers": ["C5","T1","C6","C4"],
+      "cbd":"From-to",
+      "bus_routes": {
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        },
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.19112,
+        "longitude": 28.04125
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Constitutional Hill Bus Station",
+      "bus_numbers": ["T2", "T3", "F11", "F12", "C3", "C4", "C5"],
+      "bus_routes": {
+        "T2": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Rosebank"
+        },
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "F11": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Lenasia"
+        },
+        "F12": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Noordgesig"
+        },
+        "C3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Sandton"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        },
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      },
+      "cbd":"From-to"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.19112,
+        "longitude": 28.04125
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Constitutional Hill Bus Station",
+      "bus_numbers": ["T2", "T3", "F11", "F12", "C3", "C4", "C5"],
+      "cbd":"to",
+      "bus_routes": {
+        "T2": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Rosebank"
+        },
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "F11": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Lenasia"
+        },
+        "F12": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Noordgesig"
+        },
+        "C3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Sandton"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        },
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      }
+    },
+    {
+      "coordinates": {
+        "latitude": -26.19163,
+        "longitude": 28.03922
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Joburg Theatre Bus Station ",
+      "bus_numbers": ["T2", "T3", "F11", "F12", "C3", "C4", "C5"],
+      "bus_routes": {
+        "T2": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Rosebank"
+        },
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "F11": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Lenasia"
+        },
+        "F12": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Noordgesig"
+        },
+        "C3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Sandton"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        },
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      },
+      "cbd":"From"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.19567,
+        "longitude": 28.04089
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Park Bus Station ",
+      "bus_numbers": ["T2", "T3", "F11", "C3", "C4", "C5"],
+      "bus_routes": {
+        "T2": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Rosebank"
+        },
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "F11": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Lenasia"
+        },
+        "C3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Sandton"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        },
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      },
+      "cbd":"From-to"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.20216,
+        "longitude": 28.04178
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Rissik Street Bus Station ",
+      "bus_numbers": ["T2", "T3", "F11", "C3", "C4", "C5"],
+      "bus_routes": {
+        "T2": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Rosebank"
+        },
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "F11": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Lenasia"
+        },
+        "C3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Sandton"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        },
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      },
+      "cbd":"From"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.20282,
+        "longitude": 28.04011
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Harrison Street Bus Station ",
+      "bus_numbers": ["T2", "T3", "F11", "C3", "C4", "C5"],
+      "bus_routes": {
+        "T2": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Rosebank"
+        },
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "F11": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Lenasia"
+        },
+        "C3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Sandton"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        },
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      },
+      "cbd":"From"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.20282,
+        "longitude": 28.04011
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "address": "Library Gardens Bus Station ",
+      "bus_numbers": ["T1","T2","C1", "T3", "F11", "C3", "C4", "C5"],
+      "bus_routes": {
+        "T1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Thokoza Park"
+        },
+        "T2": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Rosebank"
+        },
+        "C1": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Parktown"
+        },
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "F11": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Lenasia"
+        },
+        "C3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Sandton"
+        },
+        "C4": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Soweto"
+        },
+        "C5": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Florida North"
+        }
+      },
+      "cbd":"From-to"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.19012,
+        "longitude": 27.96822
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "active":"false",
+      "address": "Westbury Bus Station ",
+      "bus_numbers": [ "T3", "F8", "C6"],
+      "bus_routes": {
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "F8": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Eldorado Park"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        }
+      },
+      "cbd":"From-to"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.19492,
+        "longitude": 27.96299
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "active":"true",
+      "address": "Bosmont Bus Station  ",
+      "bus_numbers": [ "T3", "F6","F7","C6"],
+      "bus_routes": {
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "F6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Riverlea"
+        },
+        "F7": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Longdale"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        }
+      },
+      "cbd":"From-to"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.190056,
+        "longitude":  27.968630
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "active":"true",
+      "address": "Coronationville Station  ",
+      "bus_numbers": [ "T3", "F6","F7","C6"],
+      "bus_routes": {
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "F6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Riverlea"
+        },
+        "F7": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Longdale"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        }
+      },
+      "cbd":"From"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.190162,
+        "longitude":   27.968009
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "active":"true",
+      "address": "Coronationville Station  ",
+      "bus_numbers": [ "T3","C6"],
+      "bus_routes": {
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        }
+      },
+      "cbd":"To"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.195271,
+        "longitude":  27.962766
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "active":"true",
+      "address": "Industria West Station  ",
+      "bus_numbers": [ "T3","C6"],
+      "bus_routes": {
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        }
+      },
+      "cbd":"From-to"
+    },
+
+    {
+      "coordinates": {
+        "latitude": -26.21581,
+        "longitude":  27.94336
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "active":"true",
+      "address": "New Canada Bus Station  ",
+      "bus_numbers": [ "T3","C6"],
+      "bus_routes": {
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        }
+      },
+      "cbd":"From-to"
+    },
+    {
+      "coordinates": {
+        "latitude": 26.22636,
+        "longitude": 27.93504
+      },
+      "street_direction": "East",
+      "type":"Bus station",
+      "active":"true",
+      "address": "Noordgesig Extension Bus Station  ",
+      "bus_numbers": [ "T3","C6"],
+      "bus_routes": {
+        "T3": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Protea Glen"
+        },
+        "C6": {
+          "Northbound": "Joburg CBD",
+          "Southbound": "Meadowlands"
+        }
+      },
+      "cbd":"From-to"
+    }
+
+  ]
+}
