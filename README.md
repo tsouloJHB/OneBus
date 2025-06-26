@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # onebus
 
 A new Flutter project.
@@ -14,3 +15,6 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+# OneBus
+>>>>>>> 716476bcd204d3b33685093d9ecd5e6ee561d18c
