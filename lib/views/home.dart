@@ -4,6 +4,9 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:onebus/state/track_bus_state.dart';
 import 'package:onebus/state/screen_state.dart';
 import 'addRoute.dart';
+import 'payment_screen.dart';
+import 'profile_screen.dart';
+import 'settings_screen.dart';
 import 'maps/track_bus.dart';
 import 'maps/track_by_location.dart';
 import 'package:onebus/controllers/bus_controller.dart';
@@ -19,10 +22,31 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _selectedIndex = 0;
 
-  void _onItemTapped(int index) {
+    void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
+    
+    // Handle navigation based on selected index
+    switch (index) {
+      case 0:
+        // Home - already on home screen
+        break;
+      case 1:
+        // Settings - navigate to settings screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => SettingsScreen()),
+        );
+        break;
+      case 2:
+        // Profile - navigate to profile screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => ProfileScreen()),
+        );
+        break;
+    }
   }
 
   @override
@@ -198,7 +222,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (context) => AddRouteScreen()),
+                                  builder: (context) => PaymentScreen()),
                             );
                           },
                         ),
