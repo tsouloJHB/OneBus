@@ -15,8 +15,14 @@ final busTrackingStreamProvider =
   final busCompany = ref.watch(selectedBusCompanyState);
   final busService = BusCommunicationServices();
 
-  return busService.streamBusLocation(
-    busNumber: "C5", // You might want to make this dynamic
+  // return busService.streamBusLocation(
+  //   busNumber: "C5", // You might want to make this dynamic
+  //   busCompany: busCompany,
+  //   direction: "Northbound", // You might want to make this dynamic
+  // );
+
+  return busService.streamBusLocationLive(
+    busNumber: "101", // You might want to make this dynamic
     busCompany: busCompany,
     direction: "Northbound", // You might want to make this dynamic
   );
