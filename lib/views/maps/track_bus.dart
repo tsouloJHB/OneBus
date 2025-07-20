@@ -23,6 +23,7 @@ import 'package:onebus/views/maps/widegts/bottom_tracking_sheet.dart';
 import 'package:onebus/views/maps/widegts/menu_button_widget.dart';
 import 'package:onebus/views/maps/widegts/search_location_overlay.dart';
 import 'package:onebus/views/maps/widegts/selection_location_sheet.dart';
+import 'package:onebus/models/bus_location_data.dart';
 
 final selectedBusStateProvider = StateProvider<String>((ref) => '');
 final currentBusLocationProvider = StateProvider<LatLng?>((ref) => null);
@@ -1061,106 +1062,122 @@ class TrackBusState extends ConsumerState<TrackBus> {
     final currentBusLocation = ref.watch(currentBusLocationProvider);
 
     // Restore stream listener
-    ref.listen(busTrackingStreamProvider, (previous, next) {
-      next.whenData((busData) {
-        if (!_isStreamActive) return; // Only process if stream is active
-        print("DEBUG: Received bus location update: ${busData.coordinates}");
+    if (selectedBusStop != null && _currentLocation != null) {
+      ref.listen<AsyncValue<BusLocationData>>(
+        busTrackingStreamProvider({
+          'busNumber': 'C5',
+          'direction': selectedBusStop.direction ?? 'Northbound',
+          'busStopIndex': selectedBusStop.busStopIndex,
+          'latitude': _currentLocation!.latitude,
+          'longitude': _currentLocation!.longitude,
+        }),
+        (previous, next) {
+          next.whenData((busData) {
+            if (!_isStreamActive) return; // Only process if stream is active
+            print(
+                "DEBUG: Received bus location update:  {busData.coordinates}");
 
-        // Update the current bus location in the provider
-        ref.read(currentBusLocationProvider.notifier).state =
-            busData.coordinates;
+            // Update the current bus location in the provider
+            ref.read(currentBusLocationProvider.notifier).state =
+                busData.coordinates;
 
-        // Calculate bearing if we have a previous location
-        double bearing = 0.0;
-        if (_previousBusLocation != null) {
-          bearing =
-              _calculateBearing(_previousBusLocation!, busData.coordinates);
-          _currentBusBearing = bearing;
-          print("DEBUG: Calculated bearing: ${bearing.toStringAsFixed(2)}°");
-        }
-
-        // Update previous location for next calculation
-        _previousBusLocation = busData.coordinates;
-
-        // Update marker position and camera
-        setState(() {
-          markers.removeWhere((marker) => marker.markerId == busMarkerId);
-
-          // Create rotated bus marker
-          _createRotatedBusIcon(bearing).then((rotatedIcon) {
-            if (mounted) {
-              setState(() {
-                markers.add(
-                  Marker(
-                    markerId: busMarkerId,
-                    position: busData.coordinates,
-                    icon: rotatedIcon,
-                    rotation: bearing, // Add rotation to marker
-                    infoWindow: const InfoWindow(
-                      title: 'Bus Location',
-                      snippet: 'Your bus is here',
-                    ),
-                  ),
-                );
-              });
+            // Calculate bearing if we have a previous location
+            double bearing = 0.0;
+            if (_previousBusLocation != null && busData.coordinates != null) {
+              bearing = _calculateBearing(
+                  _previousBusLocation!, busData.coordinates!);
+              _currentBusBearing = bearing;
+              print(
+                  "DEBUG: Calculated bearing:  {bearing.toStringAsFixed(2)}°");
             }
-          }).catchError((error) {
-            print("DEBUG: Error creating rotated bus icon: $error");
-            // Fallback to default marker
-            if (mounted) {
-              setState(() {
-                markers.add(
-                  Marker(
-                    markerId: busMarkerId,
-                    position: busData.coordinates,
-                    icon: busIcon != null
-                        ? BitmapDescriptor.fromBytes(busIcon!)
-                        : BitmapDescriptor.defaultMarker,
-                    infoWindow: const InfoWindow(
-                      title: 'Bus Location',
-                      snippet: 'Your bus is here',
-                    ),
-                  ),
-                );
+
+            // Update previous location for next calculation
+            _previousBusLocation = busData.coordinates;
+
+            // Update marker position and camera
+            setState(() {
+              markers.removeWhere((marker) => marker.markerId == busMarkerId);
+
+              // Create rotated bus marker
+              _createRotatedBusIcon(bearing).then((rotatedIcon) {
+                if (mounted && busData.coordinates != null) {
+                  setState(() {
+                    markers.add(
+                      Marker(
+                        markerId: busMarkerId,
+                        position: busData.coordinates!,
+                        icon: rotatedIcon,
+                        rotation: bearing, // Add rotation to marker
+                        infoWindow: const InfoWindow(
+                          title: 'Bus Location',
+                          snippet: 'Your bus is here',
+                        ),
+                      ),
+                    );
+                  });
+                }
+              }).catchError((error) {
+                print("DEBUG: Error creating rotated bus icon: $error");
+                // Fallback to default marker
+                if (mounted && busData.coordinates != null) {
+                  setState(() {
+                    markers.add(
+                      Marker(
+                        markerId: busMarkerId,
+                        position: busData.coordinates!,
+                        icon: busIcon != null
+                            ? BitmapDescriptor.fromBytes(busIcon!)
+                            : BitmapDescriptor.defaultMarker,
+                        infoWindow: const InfoWindow(
+                          title: 'Bus Location',
+                          snippet: 'Your bus is here',
+                        ),
+                      ),
+                    );
+                  });
+                }
               });
+            });
+
+            // Always follow bus in tracking mode
+            if (currentScreenState == ScreenState.tracking &&
+                _mapController != null &&
+                busData.coordinates != null) {
+              print("DEBUG: Moving camera to follow bus");
+              _mapController.animateCamera(
+                CameraUpdate.newLatLngZoom(
+                  busData.coordinates!,
+                  _getZoomLevel(currentScreenState),
+                ),
+              );
+            }
+
+            // Only update distance/ETA if we're in tracking mode and have a selected bus stop
+            if (selectedBusStop != null &&
+                currentScreenState == ScreenState.tracking &&
+                busData.coordinates != null) {
+              final distance = _calculateDistance(
+                  busData.coordinates!, selectedBusStop.coordinates);
+
+              print(
+                  "DEBUG: Calculated distance from bus to stop: $distance km");
+
+              // Always update distance and ETA, regardless of distance size
+              final lastUpdate = ref.read(lastUpdateTimeProvider);
+              final now = DateTime.now();
+
+              // Update more frequently (every 1 second instead of 2)
+              if (lastUpdate == null ||
+                  now.difference(lastUpdate).inSeconds >= 1) {
+                _updateDistanceAndETA(busData.coordinates!, selectedBusStop);
+                ref.read(lastUpdateTimeProvider.notifier).state = now;
+                print("DEBUG: Updated distance and ETA values");
+              }
             }
           });
-        });
-
-        // Always follow bus in tracking mode
-        if (currentScreenState == ScreenState.tracking &&
-            _mapController != null) {
-          print("DEBUG: Moving camera to follow bus");
-          _mapController.animateCamera(
-            CameraUpdate.newLatLngZoom(
-              busData.coordinates,
-              _getZoomLevel(currentScreenState),
-            ),
-          );
-        }
-
-        // Only update distance/ETA if we're in tracking mode and have a selected bus stop
-        if (selectedBusStop != null &&
-            currentScreenState == ScreenState.tracking) {
-          final distance = _calculateDistance(
-              busData.coordinates, selectedBusStop.coordinates);
-
-          print("DEBUG: Calculated distance from bus to stop: $distance km");
-
-          // Always update distance and ETA, regardless of distance size
-          final lastUpdate = ref.read(lastUpdateTimeProvider);
-          final now = DateTime.now();
-
-          // Update more frequently (every 1 second instead of 2)
-          if (lastUpdate == null ||
-              now.difference(lastUpdate).inSeconds >= 1) {
-            _updateDistanceAndETA(busData.coordinates, selectedBusStop);
-            ref.read(lastUpdateTimeProvider.notifier).state = now;
-            print("DEBUG: Updated distance and ETA values");
-          }
-        }
-      });
-    });
+        },
+      );
+    }
 
     return Scaffold(
       body: Stack(
@@ -1448,8 +1465,18 @@ class TrackBusState extends ConsumerState<TrackBus> {
     ref.read(selectedBusStopProvider.notifier).state = selectedBusStop;
     _busTrackingController.changeScreenState(ScreenState.tracking);
     print("DEBUG: Starting bus tracking stream");
-    ref.read(busTrackingStreamProvider);
-    await _loadAndDrawRoutePolyline(selectedBus, 'Northbound');
+    // Prepare parameters for the provider
+    final busStopIndex = selectedBusStop.busStopIndex;
+    final direction = selectedBusStop.direction ?? 'Northbound';
+    final location = _currentLocation;
+    ref.read(busTrackingStreamProvider({
+      'busNumber': 'C5',
+      'direction': direction,
+      'busStopIndex': busStopIndex,
+      'latitude': location?.latitude,
+      'longitude': location?.longitude,
+    }));
+    await _loadAndDrawRoutePolyline(selectedBus, direction);
     print(
         "DEBUG: Bus tracking initialized - waiting for real bus location data");
 

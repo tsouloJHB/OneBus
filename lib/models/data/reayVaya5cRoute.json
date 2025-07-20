@@ -1,0 +1,310 @@
+{
+  "bus_stops": [
+    {
+      "coordinates": {
+        "latitude": -26.1742,
+        "longitude": 27.95722
+      },
+      "type": "Bus stop",
+      "address": "Main road and 17 street",
+      "bus_stop_index": 20,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.173968,
+        "longitude": 27.957238
+      },
+      "type": "Bus stop",
+      "address": "Main road and 17 street",
+      "bus_stop_index": 1,
+      "direction": "Northbound"
+    },
+
+    {
+      "coordinates": {
+        "latitude": -26.174218504355338,
+        "longitude": 27.962761385665004
+      },
+      "address": "105 Main Rd, Newlands, Randburg, 2092",
+      "bus_stop_index": 2,
+      "direction": "Northbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.174565126136343,
+        "longitude": 27.963044813663775
+      },
+      "address": "100 Main Rd, Newland",
+      "bus_stop_index": 19,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.175744596678115,
+        "longitude": 27.96747044376172
+      },
+      "address": "140-136 Main Rd, Newlands, Randburg, 2092",
+      "bus_stop_index": 18,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.175635545564255,
+        "longitude": 27.96784838499146
+      },
+      "address": "149 Main Rd, Newlands, Randburg, 2092",
+      "bus_stop_index": 3,
+      "direction": "Northbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.17695764525254,
+        "longitude": 27.971516721878604
+      },
+      "address": "Sophia Town Police Station",
+      "bus_stop_index": 17,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.177320166469546,
+        "longitude": 27.9724908735137
+      },
+      "address": "Main Rd, Martindale, Johannesburg, 2092",
+      "bus_stop_index": 4,
+      "direction": "Northbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.178307106637636,
+        "longitude": 27.973772995629712
+      },
+      "address": "Main Rd, Martindale, Johannesburg, 2092",
+      "bus_stop_index": 16,
+      "direction": "Southbound"
+    },
+
+    {
+      "coordinates": {
+        "latitude": -26.181111316139788,
+        "longitude": 27.978598293763316
+      },
+      "address": "Westbury, Johannesburg, 2093",
+      "bus_stop_index": 15,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18293584803714,
+        "longitude": 27.98072265670588
+      },
+      "address": "Perthweg, Westdene, Johannesburg, 2092",
+      "bus_stop_index": 14,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.184884497848433,
+        "longitude": 27.98219597687166
+      },
+      "address": "17 Perth Rd, Westdene, Johannesburg, 2092",
+      "bus_stop_index": 5,
+      "direction": "Northbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18325257720585,
+        "longitude": 27.98120626459567
+      },
+      "address": "7-9 Perthweg, Westdene, Johannesburg, 2092",
+      "bus_stop_index": 6,
+      "direction": "Northbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.185182980965855,
+        "longitude": 27.98212629738987
+      },
+      "address": "Laurence Wessenaar St, Westbury, Johannesburg, 2093",
+      "bus_stop_index": 13,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.183228593047158,
+        "longitude": 27.99049990028975
+      },
+      "type": "Bus station",
+      "address": "Helen Joseph Hospital Station",
+      "bus_stop_index": 0,
+      "bus_stop_indices": {
+        "northbound": 7,
+        "southbound": 12
+      },
+      "direction": "bidirectional"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18197145871311,
+        "longitude": 27.99895649341298
+      },
+      "type": "Bus station",
+      "address": "UJ Kingsway Campus Station",
+      "bus_stop_index": 0,
+      "bus_stop_indices": {
+        "northbound": 8,
+        "southbound": 11
+      },
+      "direction": "bidirectional"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.18298,
+        "longitude": 28.00357
+      },
+      "type": "Bus station",
+      "address": "UJ Sophiatown Residence Bus Station",
+      "bus_stop_index": 10,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.1832,
+        "longitude": 28.00452
+      },
+      "type": "Bus station",
+      "address": "UJ Sophiatown Residence Bus Station",
+      "bus_stop_index": 9,
+      "direction": "Northbound"
+    },
+
+    {
+      "coordinates": {
+        "latitude": -26.184327,
+        "longitude": 28.009803
+      },
+      "type": "Bus station",
+      "address": "SABC Media Park Bus Station",
+      "bus_stop_index": 9,
+      "direction": "Southbound"
+    }, 
+    {
+      "coordinates": {
+        "latitude": -26.184422,
+        "longitude": 28.011154
+      },
+      "type": "Bus station",
+      "address": "SABC Media Park Bus Station",
+      "bus_stop_index": 10,
+      "direction": "Northbound"
+    },
+     {
+      "coordinates": {
+        "latitude": -26.183160,
+        "longitude": 28.020200
+      },
+      "type": "Bus station",
+      "address": "Milpark Station",
+      "bus_stop_index": 0,
+       "bus_stop_indices": {
+        "northbound": 11,
+        "southbound": 8
+      },
+      "direction": "bidirectional"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.185220597453053,
+        "longitude": 28.028090695335067
+      },
+      "type": "Bus station",
+      "address": "Wits Bus Station",
+      "bus_stop_index": 0,
+       "bus_stop_indices": {
+        "northbound": 12,
+        "southbound": 7
+      },
+      "direction": "bidirectional"
+    },
+
+    {
+      "coordinates": {
+        "latitude": -26.185084425447673,
+        "longitude": 28.0392013235618
+      }, 
+      "type": "Bus station",
+      "address": "Parktown Station West",
+      "bus_stop_index": 6,
+       "bus_stop_indices": {
+        "northbound": 13,
+        "southbound": 6
+      },
+      "direction": "bidirectional"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.19112,
+        "longitude": 28.04125
+      },
+      "type": "Bus station",
+      "address": "Constitutional Hill Bus Station",
+      "bus_stop_index": 14,
+      "direction": "Northbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.19163,
+        "longitude": 28.03922
+      },
+      "type": "Bus station",
+      "address": "Joburg Theatre Bus Station ",
+      "bus_stop_index": 5,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.19567,
+        "longitude": 28.04089
+      },
+      "type": "Bus station",
+      "address": "Park Bus Station ",
+      "bus_stop_index": 4,
+      "bus_stop_indices": {
+        "northbound": 15,
+        "southbound": 4
+      },
+      "direction": "bidirectional"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.20216,
+        "longitude": 28.04178
+      },
+      "type": "Bus station",
+      "address": "Rissik Street Bus Station ",
+      "bus_stop_index": 3,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.20282,
+        "longitude": 28.04011
+      },
+      "type": "Bus station",
+      "address": "Harrison Street Bus Station ",
+      "bus_stop_index": 2,
+      "direction": "Southbound"
+    },
+    {
+      "coordinates": {
+        "latitude": -26.20282,
+        "longitude": 28.04011
+      },
+      "direction": "Southbound",
+      "type": "Bus station",
+      "address": "Library Gardens Bus Station ",
+      "bus_stop_index": 1
+    }
+  ]
+}

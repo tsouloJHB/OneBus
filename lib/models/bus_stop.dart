@@ -6,6 +6,8 @@ class BusStop {
   final String? address; // Optional address field
   final String type;
   final Map<String, Map<String, String>>? busRoutes;
+  final int? busStopIndex;
+  final String? direction;
 
   BusStop({
     required this.coordinates,
@@ -13,5 +15,7 @@ class BusStop {
     this.address,
     this.type = 'Bus stop',
     this.busRoutes,
+    this.busStopIndex,
+    this.direction,
   });
 }

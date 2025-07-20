@@ -10,21 +10,18 @@ import '../services/bus_communication_services.dart';
 // Add providers for bus tracking
 final selectedBusCompanyState = StateProvider<String>((ref) => '');
 final busLocationProvider = StateProvider<BusLocationData?>((ref) => null);
-final busTrackingStreamProvider =
-    StreamProvider.autoDispose<BusLocationData>((ref) {
+final busTrackingStreamProvider = StreamProvider.autoDispose
+    .family<BusLocationData, Map<String, dynamic>>((ref, params) {
   final busCompany = ref.watch(selectedBusCompanyState);
   final busService = BusCommunicationServices();
-
-  // return busService.streamBusLocation(
-  //   busNumber: "C5", // You might want to make this dynamic
-  //   busCompany: busCompany,
-  //   direction: "Northbound", // You might want to make this dynamic
-  // );
-
+  // Expect params: {busNumber, direction, busStopIndex, latitude, longitude}
   return busService.streamBusLocationLive(
-    busNumber: "101", // You might want to make this dynamic
+    busNumber: params['busNumber'] ?? 'C5',
     busCompany: busCompany,
-    direction: "Northbound", // You might want to make this dynamic
+    direction: params['direction'] ?? 'Northbound',
+    busStopIndex: params['busStopIndex'],
+    latitude: params['latitude'],
+    longitude: params['longitude'],
   );
 });
 

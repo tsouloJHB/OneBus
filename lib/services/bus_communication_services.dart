@@ -173,6 +173,9 @@ class BusCommunicationServices {
     required String busNumber,
     required String busCompany,
     required String direction,
+    int? busStopIndex,
+    double? latitude,
+    double? longitude,
   }) {
     final controller = StreamController<BusLocationData>();
     final topic = "/topic/bus/${busNumber}_${direction}";
@@ -250,9 +253,16 @@ class BusCommunicationServices {
           // Send subscription request to backend
           print(
               '[DEBUG] streamBusLocationLive: Sending subscription message to /app/subscribe');
+          final Map<String, dynamic> payload = {
+            'busNumber': busNumber,
+            'direction': direction,
+          };
+          if (busStopIndex != null) payload['busStopIndex'] = busStopIndex;
+          if (latitude != null) payload['latitude'] = latitude;
+          if (longitude != null) payload['longitude'] = longitude;
           stompClient?.send(
             destination: '/app/subscribe',
-            body: json.encode({'busNumber': busNumber, 'direction': direction}),
+            body: json.encode(payload),
           );
         },
         onWebSocketError: (dynamic error) {

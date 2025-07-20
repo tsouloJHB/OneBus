@@ -31,6 +31,9 @@ class BusStopService {
                         Map<String, String>.from(value),
                       )))
               : null;
+          final busStopIndex =
+              busStop["bus_stop_index"] ?? busStop["busStopIndex"];
+          final direction = busStop["direction"];
 
           return BusStop(
             coordinates: latLng,
@@ -38,6 +41,8 @@ class BusStopService {
             address: await _getAddressFromLatLng(latLng),
             type: type,
             busRoutes: busRoutes,
+            busStopIndex: busStopIndex,
+            direction: direction,
           );
         }),
       );
