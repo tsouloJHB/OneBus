@@ -22,11 +22,6 @@ class BusTrackingController {
     ref.read(selectedBusState.notifier).state = '';
   }
 
-  // Bus Stop Selection Methods
-  bool validateBusAtStop(BusStop busStop, String selectedBus) {
-    return busStop.busNumbers.contains(selectedBus);
-  }
-
   void selectBusStop(BusStop busStop) async {
     print("DEBUG: Selecting bus stop - calculations disabled for testing");
     print("DEBUG: Bus stop: ${busStop.address}");

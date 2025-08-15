@@ -238,7 +238,7 @@ class _SelectionLocationSheetState
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Available Buses: ${widget.selectedBusStop!.busNumbers.join(", ")}',
+                                      'Direction: ${widget.selectedBusStop!.direction ?? 'Unknown'}',
                                       style: TextStyle(
                                         color: Colors.grey[600],
                                         fontSize: 12,

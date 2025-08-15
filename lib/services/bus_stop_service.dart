@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:onebus/models/bus_stop.dart';
 import 'package:onebus/services/bus_communication_services.dart';
+import 'package:onebus/services/bus_route_service.dart';
 import 'package:onebus/state/track_bus_state.dart';
 import 'package:onebus/state/screen_state.dart';
 
@@ -24,30 +25,97 @@ class BusStopService {
           final busNumbers = List<String>.from(busStop["bus_numbers"]);
           final latLng = LatLng(latitude, longitude);
           final type = busStop["type"] ?? "Bus stop";
-          final busRoutes = busStop["bus_routes"] != null
-              ? Map<String, Map<String, String>>.from(
-                  busStop["bus_routes"].map((key, value) => MapEntry(
-                        key,
-                        Map<String, String>.from(value),
-                      )))
-              : null;
-          final busStopIndex =
-              busStop["bus_stop_index"] ?? busStop["busStopIndex"];
+          final busStopIndex = busStop["bus_stop_index"];
           final direction = busStop["direction"];
+          final busStopIndices = busStop["bus_stop_indices"] != null
+              ? Map<String, int>.from(busStop["bus_stop_indices"])
+              : null;
 
           return BusStop(
             coordinates: latLng,
-            busNumbers: busNumbers,
-            address: await _getAddressFromLatLng(latLng),
+            address: busStop["address"],
             type: type,
-            busRoutes: busRoutes,
             busStopIndex: busStopIndex,
             direction: direction,
+            busStopIndices: busStopIndices,
           );
         }),
       );
     } catch (e) {
       debugPrint('Error loading bus stops: $e');
+      busStops = [];
+    }
+  }
+
+  /// Load bus stops from API for a specific bus and company
+  Future<void> loadBusStopsFromApi(String busNumber, String companyName) async {
+    try {
+      debugPrint(
+          '[DEBUG] Loading bus stops from API for bus: $busNumber, company: $companyName');
+
+      final busRouteResponse =
+          await BusRouteService.getBusRoutesAndStops(busNumber, companyName);
+
+      if (busRouteResponse != null && busRouteResponse.routes.isNotEmpty) {
+        // Get all stops from all routes
+        List<BusStop> allStops = [];
+
+        for (var route in busRouteResponse.routes) {
+          if (route.active && route.stops.isNotEmpty) {
+            final routeStops =
+                BusRouteService.convertApiStopsToBusStops(route.stops);
+            allStops.addAll(routeStops);
+          }
+        }
+
+        if (allStops.isNotEmpty) {
+          busStops = allStops;
+          debugPrint(
+              '[DEBUG] Successfully loaded ${busStops.length} bus stops from API');
+          return;
+        }
+      }
+
+      // Fallback to JSON if API fails or returns no data
+      debugPrint('[WARN] API returned no data, falling back to JSON file');
+      await loadBusStopsFromJson();
+    } catch (e) {
+      debugPrint('[ERROR] Error loading bus stops from API: $e');
+      // Fallback to JSON if API fails
+      await loadBusStopsFromJson();
+    }
+  }
+
+  /// Load bus stops from JSON file (fallback method)
+  Future<void> loadBusStopsFromJson() async {
+    try {
+      final busStopsData = await BusCommunicationServices.getBusStopsFromJson();
+      busStops = await Future.wait(
+        busStopsData.map((busStop) async {
+          final coordinates = busStop["coordinates"];
+          final latitude = coordinates["latitude"];
+          final longitude = coordinates["longitude"];
+          final latLng = LatLng(latitude, longitude);
+          final type = busStop["type"] ?? "Bus stop";
+          final busStopIndex = busStop["bus_stop_index"];
+          final direction = busStop["direction"];
+          final busStopIndices = busStop["bus_stop_indices"] != null
+              ? Map<String, int>.from(busStop["bus_stop_indices"])
+              : null;
+
+          return BusStop(
+            coordinates: latLng,
+            address: busStop["address"],
+            type: type,
+            busStopIndex: busStopIndex,
+            direction: direction,
+            busStopIndices: busStopIndices,
+          );
+        }),
+      );
+      debugPrint('[DEBUG] Loaded ${busStops.length} bus stops from JSON file');
+    } catch (e) {
+      debugPrint('[ERROR] Error loading bus stops from JSON: $e');
       busStops = [];
     }
   }
@@ -69,40 +137,11 @@ class BusStopService {
   }
 
   Future<void> handleBusStopSelection(BusStop busStop) async {
-    final selectedBus = ref.read(selectedBusState);
     final currentScreenState = ref.read(currentScreenStateProvider);
 
-    if (currentScreenState == ScreenState.locationSelection &&
-        selectedBus.isNotEmpty) {
-      if (!busStop.busNumbers.contains(selectedBus)) {
-        // Show bus not available dialog
-        return;
-      }
-
-      if (busStop.type.toLowerCase() == 'bus station' &&
-          busStop.busRoutes != null) {
-        // Get bus direction data
-        // final directionData =
-        //     await BusCommunicationServices.getBusDirectionData(
-        //   selectedBus,
-        //   busStop.coordinates.toString(),
-        // );
-
-        // Update bus tracking state with direction data
-        ref.read(busTrackingProvider.notifier).updateBusTracking(
-              selectedBus: selectedBus,
-              selectedBusStop: busStop,
-              distance: 0.0, // Will be calculated when tracking starts
-              estimatedArrivalTime:
-                  0.0, // Will be calculated when tracking starts
-              isOnTime: true,
-              arrivalStatus: 'On Time',
-              // directionData: directionData,
-            );
-      } else {
-        // Regular bus stop selection
-        ref.read(selectedBusStopProvider.notifier).state = busStop;
-      }
+    if (currentScreenState == ScreenState.locationSelection) {
+      // No busNumbers check, just select the stop
+      ref.read(selectedBusStopProvider.notifier).state = busStop;
     }
   }
 
@@ -116,8 +155,7 @@ class BusStopService {
         position: busStop.coordinates,
         infoWindow: InfoWindow(
           title: busStop.type,
-          snippet:
-              'Buses: ${busStop.busNumbers.join(", ")}\n${busStop.address}',
+          snippet: busStop.address ?? '',
         ),
         icon: customMarkerIcon ?? BitmapDescriptor.defaultMarker,
         onTap: () => onTap(busStop),

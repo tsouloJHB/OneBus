@@ -7,19 +7,19 @@ import 'home.dart';
 class SelectProviderScreen extends ConsumerWidget {
   final List<Map<String, String>> providers = [
     {
-      "name": "Metrobus",
+      "name": "metrobus",
       "image": "assets/images/metrobus.png",
       "height": "80",
       "width": "150"
     },
     {
-      "name": "Putco",
+      "name": "putco",
       "image": "assets/images/putco.png",
       "height": "50",
       "width": "190"
     },
     {
-      "name": "Rea vaya",
+      "name": "rea vaya",
       "image": "assets/images/rea_yea_vaya.png",
       "height": "80",
       "width": "100"
@@ -69,16 +69,76 @@ class SelectProviderScreen extends ConsumerWidget {
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 15.0),
                       child: GestureDetector(
-                        onTap: () {
+                        onTap: () async {
                           // Handle selection
                           print('Selected: ${provider['name']}');
 
-                          busController.setBusComapny(provider['name']!);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => const HomeScreen()),
+                          // Show loading dialog
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                content: Row(
+                                  children: [
+                                    CircularProgressIndicator(),
+                                    SizedBox(width: 20),
+                                    Text('Loading bus routes...'),
+                                  ],
+                                ),
+                              );
+                            },
                           );
+
+                          try {
+                            // Set the bus company
+                            busController.setBusComapny(provider['name']!);
+
+                            // Fetch bus routes for the selected company
+                            final buses =
+                                await busController.getAvailableBuses();
+                            print(
+                                'Fetched ${buses.length} buses for ${provider['name']}');
+
+                            // Close loading dialog
+                            Navigator.of(context).pop();
+
+                            // Navigate to home screen
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) => const HomeScreen()),
+                            );
+                          } catch (e) {
+                            // Close loading dialog
+                            Navigator.of(context).pop();
+
+                            // Show error dialog
+                            showDialog(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  title: Text('Error'),
+                                  content: Text(
+                                      'Failed to load bus routes. Using default list.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                              builder: (context) =>
+                                                  const HomeScreen()),
+                                        );
+                                      },
+                                      child: Text('Continue'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          }
                         },
                         child: Container(
                           decoration: BoxDecoration(

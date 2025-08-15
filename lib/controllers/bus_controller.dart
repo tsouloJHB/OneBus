@@ -6,10 +6,55 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/bus_location_data.dart';
 import '../services/bus_communication_services.dart';
+import '../services/bus_route_service.dart';
 
 // Add providers for bus tracking
 final selectedBusCompanyState = StateProvider<String>((ref) => '');
 final busLocationProvider = StateProvider<BusLocationData?>((ref) => null);
+
+// Provider for available buses that updates when company changes
+final availableBusesProvider =
+    FutureProvider.autoDispose<List<String>>((ref) async {
+  final busCompany = ref.watch(selectedBusCompanyState);
+
+  if (busCompany.isEmpty) {
+    return [];
+  }
+
+  try {
+    final serverBuses =
+        await BusRouteService.getBusNumbersByCompany(busCompany);
+
+    if (serverBuses.isNotEmpty) {
+      print(
+          '[DEBUG] Successfully fetched ${serverBuses.length} buses from server for $busCompany');
+      return serverBuses;
+    } else {
+      print(
+          '[WARN] No buses returned from server, falling back to hardcoded list');
+      return _getHardcodedBusesFallback(busCompany);
+    }
+  } catch (e) {
+    print('[ERROR] Exception in availableBusesProvider: $e');
+    print('[WARN] Falling back to hardcoded list due to error');
+    return _getHardcodedBusesFallback(busCompany);
+  }
+});
+
+// Fallback hardcoded bus list based on company
+List<String> _getHardcodedBusesFallback(String companyName) {
+  switch (companyName.toLowerCase()) {
+    case 'rea vaya':
+      return ["C5", "C4", "C6", "T1", "T3", "T2"];
+    case 'metrobus':
+      return ["M1", "M2", "M3", "M4"];
+    case 'putco':
+      return ["P1", "P2", "P3", "P4"];
+    default:
+      return ["C5", "C4", "C6", "T1", "T3", "T2"]; // Default fallback
+  }
+}
+
 final busTrackingStreamProvider = StreamProvider.autoDispose
     .family<BusLocationData, Map<String, dynamic>>((ref, params) {
   final busCompany = ref.watch(selectedBusCompanyState);
@@ -66,17 +111,51 @@ class BusController {
     // );
   }
 
-  getAvailableBuses() async {
-    //List<BusInfo> buses = await busCommunicationServices.getAvailableBuses();
-    final List<String> buses = [
-      "C5",
-      "C4",
-      "C6",
-      "T1",
-      "T3",
-      "T2",
-    ];
-    return buses;
+  Future<List<String>> getAvailableBuses() async {
+    try {
+      final busCompany = ref.read(selectedBusCompanyState);
+
+      if (busCompany.isEmpty) {
+        print('[WARN] No bus company selected, returning empty list');
+        return [];
+      }
+
+      print('[DEBUG] Fetching available buses for company: $busCompany');
+
+      // Try to fetch from server first
+      final serverBuses =
+          await BusRouteService.getBusNumbersByCompany(busCompany);
+
+      if (serverBuses.isNotEmpty) {
+        print(
+            '[DEBUG] Successfully fetched ${serverBuses.length} buses from server');
+        return serverBuses;
+      } else {
+        print(
+            '[WARN] No buses returned from server, falling back to hardcoded list');
+        // Fallback to hardcoded list if server returns empty or fails
+        return _getHardcodedBuses(busCompany);
+      }
+    } catch (e) {
+      print('[ERROR] Exception in getAvailableBuses: $e');
+      print('[WARN] Falling back to hardcoded list due to error');
+      final busCompany = ref.read(selectedBusCompanyState);
+      return _getHardcodedBuses(busCompany);
+    }
+  }
+
+  /// Fallback hardcoded bus list based on company
+  List<String> _getHardcodedBuses(String companyName) {
+    switch (companyName.toLowerCase()) {
+      case 'rea vaya':
+        return ["C5", "C4", "C6", "T1", "T3", "T2"];
+      case 'metrobus':
+        return ["M1", "M2", "M3", "M4"];
+      case 'putco':
+        return ["P1", "P2", "P3", "P4"];
+      default:
+        return ["C5", "C4", "C6", "T1", "T3", "T2"]; // Default fallback
+    }
   }
 
   setBusComapny(String busCompany) {

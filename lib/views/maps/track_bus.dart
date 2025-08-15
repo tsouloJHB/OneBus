@@ -13,6 +13,7 @@ import 'package:onebus/controllers/bus_tracking_controller.dart';
 
 import 'package:onebus/models/bus_stop.dart';
 import 'package:onebus/services/bus_communication_services.dart';
+import 'package:onebus/services/bus_route_service.dart';
 import 'package:onebus/state/track_bus_state.dart';
 import 'package:onebus/state/screen_state.dart';
 import 'package:onebus/views/home.dart';
@@ -156,12 +157,26 @@ class TrackBusState extends ConsumerState<TrackBus> {
   }
 
   Future<void> _initializeBuses() async {
-    final buses = await busController.getAvailableBuses();
-    if (mounted) {
-      setState(() {
-        _allBuses = List<String>.from(buses);
-        _filteredBuses = List<String>.from(_allBuses);
-      });
+    try {
+      // Use the controller to get buses (which now uses the new service)
+      final buses = await busController.getAvailableBuses();
+
+      if (mounted) {
+        setState(() {
+          _allBuses = List<String>.from(buses);
+          _filteredBuses = List<String>.from(_allBuses);
+        });
+        print('[DEBUG] Initialized ${_allBuses.length} buses from controller');
+      }
+    } catch (e) {
+      print('[ERROR] Failed to initialize buses: $e');
+      // Fallback to empty list
+      if (mounted) {
+        setState(() {
+          _allBuses = [];
+          _filteredBuses = [];
+        });
+      }
     }
   }
 
@@ -169,7 +184,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
     final searchText = _searchController.text.toLowerCase();
     setState(() {
       if (searchText.isEmpty) {
-        _filteredBuses = List.from(busController.getAvailableBuses());
+        _filteredBuses = List<String>.from(_allBuses);
       } else {
         _filteredBuses = _allBuses
             .where((bus) => bus.toLowerCase().contains(searchText))
@@ -249,8 +264,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
       _isDialogVisible = false;
     });
 
-    // Load bus stops only for track bus mode
-    _loadBusStopsAndMarkers();
+    // Don't load bus stops here - wait until a bus is selected
+    // _loadBusStopsAndMarkers(); // Removed - will be called in onBusSelected()
 
     return _location.getLocation().then((LocationData locationData) {
       if (!mounted || widget.currentScreen != 'track bus') return;
@@ -523,7 +538,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Available buses: ${busStop.busNumbers.join(", ")}',
+                    'Stop address: ${busStop.address ?? ''}',
                     style: const TextStyle(fontSize: 14),
                   ),
                 ],
@@ -556,13 +571,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
                       CameraUpdate.newLatLng(selectedStop.coordinates),
                     );
 
-                    // If the selected bus is available at this stop, start tracking
+                    // Start tracking the selected bus at this stop
                     final selectedBus = ref.read(selectedBusStateProvider);
-                    if (selectedStop.busNumbers.contains(selectedBus)) {
-                      startBusTracking(selectedBus, selectedStop);
-                    } else {
-                      showBusNotAvailableDialog(selectedStop, selectedBus);
-                    }
+                    startBusTracking(selectedBus, selectedStop);
                   },
                   child: const Text("Use This Stop"),
                 ),
@@ -607,81 +618,6 @@ class TrackBusState extends ConsumerState<TrackBus> {
     }
   }
 
-  // Helper method to show bus not available dialog
-  void showBusNotAvailableDialog(BusStop busStop, String selectedBus) {
-    setState(() {
-      _isDialogVisible = true;
-    });
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Bus Not Available at This Stop'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Bus $selectedBus does not stop at this location.'),
-              const SizedBox(height: 8),
-              const Text('Available buses at this stop:'),
-              const SizedBox(height: 4),
-              Text(busStop.busNumbers.join(', ')),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                _busTrackingController.changeScreenState(ScreenState.searchBus);
-                Navigator.pop(context);
-              },
-              child: const Text('Change Bus'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Different Stop'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final availableBus = busStop.busNumbers.first;
-                print(
-                    "DEBUG: Using available bus: $availableBus at stop: ${busStop.address}");
-
-                Navigator.pop(context);
-
-                // First update the bus selection
-                _busTrackingController.selectBus(availableBus);
-
-                // Then start tracking
-                startBusTracking(availableBus, busStop);
-
-                // Update the bus marker and camera
-                onBusSelected(availableBus);
-
-                // Ensure we're in tracking state
-                setState(() {
-                  ref.read(currentScreenStateProvider.notifier).state =
-                      ScreenState.tracking;
-                });
-
-                // Force UI update
-                setState(() {});
-              },
-              child: const Text('Use Available Bus'),
-            ),
-          ],
-        );
-      },
-    ).then((_) {
-      setState(() {
-        _isDialogVisible = false;
-      });
-    });
-  }
-
   void _updateUserLocationMarker(LatLng newLocation) {
     // Remove the old user location marker
     markers.removeWhere((marker) => marker.markerId.value == 'user_location');
@@ -714,36 +650,63 @@ class TrackBusState extends ConsumerState<TrackBus> {
   Future<void> _loadBusStopsAndMarkers() async {
     try {
       print("DEBUG: Starting to load bus stops and markers");
-      final busStopsCoordinates =
-          await BusCommunicationServices.getBusStopsFromJson();
+
+      // Get the selected bus and company
+      final selectedBus = ref.read(selectedBusStateProvider);
+      final selectedCompany = busController.getBusCompany();
+
       List<BusStop> busStops = [];
 
-      for (var busStop in busStopsCoordinates) {
-        final coordinates = busStop["coordinates"];
-        final latitude = coordinates["latitude"];
-        final longitude = coordinates["longitude"];
-        final busNumbers = List<String>.from(busStop["bus_numbers"]);
-        final latLng = LatLng(latitude, longitude);
-        final address = await _getAddressFromLatLng(latLng);
-        final type = busStop["type"] ?? "Bus stop";
-        final busRoutes = busStop["bus_routes"] != null
-            ? Map<String, Map<String, String>>.from(
-                busStop["bus_routes"].map((key, value) => MapEntry(
-                      key,
-                      Map<String, String>.from(value),
-                    )))
-            : null;
+      // Try to load from API if we have a selected bus and company
+      if (selectedBus.isNotEmpty && selectedCompany.isNotEmpty) {
+        print(
+            "DEBUG: Loading bus stops from API for bus: $selectedBus, company: $selectedCompany");
+        print("DEBUG: Making API call to: http://localhost:8080/api/routes/$selectedBus/$selectedCompany");
 
-        busStops.add(BusStop(
-          coordinates: latLng,
-          busNumbers: busNumbers,
-          address: address,
-          type: type,
-          busRoutes: busRoutes,
-        ));
+        try {
+          final busRouteResponse = await BusRouteService.getBusRoutesAndStops(
+              selectedBus, selectedCompany);
+
+          if (busRouteResponse != null && busRouteResponse.routes.isNotEmpty) {
+            print("DEBUG: API call successful! Received ${busRouteResponse.routes.length} routes");
+            
+            // Get all stops from all routes
+            for (var route in busRouteResponse.routes) {
+              if (route.active && route.stops.isNotEmpty) {
+                print("DEBUG: Processing route ${route.routeName} with ${route.stops.length} stops");
+                final routeStops =
+                    BusRouteService.convertApiStopsToBusStops(route.stops);
+                
+                busStops.addAll(routeStops);
+              }
+            }
+
+            if (busStops.isNotEmpty) {
+              print(
+                  "DEBUG: Successfully loaded ${busStops.length} bus stops from API");
+            } else {
+              print("DEBUG: API returned no stops, falling back to JSON");
+              await _loadBusStopsFromJson();
+              return;
+            }
+          } else {
+            print("DEBUG: API returned no routes, falling back to JSON");
+            await _loadBusStopsFromJson();
+            return;
+          }
+        } catch (e) {
+          print("DEBUG: API call failed with error: $e");
+          print("DEBUG: Falling back to local JSON file");
+          await _loadBusStopsFromJson();
+          return;
+        }
+      } else {
+        print("DEBUG: No bus/company selected (bus: '$selectedBus', company: '$selectedCompany'), loading from JSON");
+        await _loadBusStopsFromJson();
+        return;
       }
 
-      print("DEBUG: Created ${busStops.length} bus stop objects");
+      print("DEBUG: Created ${busStops.length} bus stop objects from API");
 
       // Create marker icon first
       await _createMarkerIcon();
@@ -763,14 +726,14 @@ class TrackBusState extends ConsumerState<TrackBus> {
             position: busStop.coordinates,
             icon: customMarkerIcon ?? BitmapDescriptor.defaultMarker,
             infoWindow: InfoWindow(
-              title: '${busStop.type} (${busStop.busNumbers.join(", ")})',
+              title: '${busStop.type} (${busStop.direction ?? ""})',
               snippet: busStop.address,
             ),
             consumeTapEvents: true,
             onTap: () {
               print(
                   "DEBUG: Marker tapped for bus stop at ${busStop.coordinates}");
-              print("DEBUG: Available buses: ${busStop.busNumbers}");
+              print("DEBUG: Available buses: ${busStop.direction}");
               print(
                   "DEBUG: Current selected bus: ${ref.read(selectedBusStateProvider)}");
               _handleBusStopSelection(busStop);
@@ -793,14 +756,85 @@ class TrackBusState extends ConsumerState<TrackBus> {
     }
   }
 
+  /// Load bus stops from JSON file (fallback method)
+  Future<void> _loadBusStopsFromJson() async {
+    try {
+      print("DEBUG: Loading bus stops from JSON file");
+      final busStopsCoordinates =
+          await BusCommunicationServices.getBusStopsFromJson();
+      List<BusStop> busStops = [];
+
+      for (var busStop in busStopsCoordinates) {
+        final coordinates = busStop["coordinates"];
+        final latitude = coordinates["latitude"];
+        final longitude = coordinates["longitude"];
+        final latLng = LatLng(latitude, longitude);
+        final address = await _getAddressFromLatLng(latLng);
+        final type = busStop["type"] ?? "Bus stop";
+
+        busStops.add(BusStop(
+          coordinates: latLng,
+          address: address,
+          type: type,
+        ));
+      }
+
+      print("DEBUG: Created ${busStops.length} bus stop objects from JSON");
+
+      // Create marker icon first
+      await _createMarkerIcon();
+      print("DEBUG: Created marker icon");
+
+      // Update state with bus stops and markers
+      setState(() {
+        _busStops = busStops;
+        markers.clear();
+
+        // Add bus stop markers
+        for (var busStop in busStops) {
+          final markerId = MarkerId(
+              'bus_stop_${busStop.coordinates.latitude}_${busStop.coordinates.longitude}');
+          final marker = Marker(
+            markerId: markerId,
+            position: busStop.coordinates,
+            icon: customMarkerIcon ?? BitmapDescriptor.defaultMarker,
+            infoWindow: InfoWindow(
+              title: '${busStop.type} (${busStop.direction ?? ""})',
+              snippet: busStop.address,
+            ),
+            consumeTapEvents: true,
+            onTap: () {
+              print(
+                  "DEBUG: Marker tapped for bus stop at ${busStop.coordinates}");
+              print("DEBUG: Available buses: ${busStop.direction}");
+              print(
+                  "DEBUG: Current selected bus: ${ref.read(selectedBusStateProvider)}");
+              _handleBusStopSelection(busStop);
+            },
+          );
+          markers.add(marker);
+          print("DEBUG: Added marker for bus stop at ${busStop.coordinates}");
+        }
+
+        // Add user location marker if available
+        if (_currentLocation != null) {
+          _updateUserLocationMarker(_currentLocation!);
+          print("DEBUG: Added user location marker");
+        }
+      });
+
+      print("DEBUG: Total markers added: ${markers.length}");
+    } catch (e) {
+      print('Error loading bus stops from JSON: $e');
+    }
+  }
+
   void _handleBusStopSelection(BusStop busStop) {
     print("DEBUG: _handleBusStopSelection called");
     print("DEBUG: Bus stop coordinates: ${busStop.coordinates}");
     print("DEBUG: Bus stop address: ${busStop.address}");
-    print("DEBUG: Available buses: ${busStop.busNumbers}");
 
-    final selectedBus =
-        ref.read(selectedBusStateProvider); // Use the new provider
+    final selectedBus = ref.read(selectedBusStateProvider);
     final currentScreenState = ref.read(currentScreenStateProvider);
 
     print("DEBUG: Current state - Selected Bus: $selectedBus");
@@ -810,19 +844,18 @@ class TrackBusState extends ConsumerState<TrackBus> {
         selectedBus.isNotEmpty) {
       print("DEBUG: Conditions met for bus stop selection");
 
-      if (!busStop.busNumbers.contains(selectedBus)) {
-        print("DEBUG: Selected bus not available at this stop");
-        showBusNotAvailableDialog(busStop, selectedBus);
+      // If the stop is bidirectional, prompt for direction
+      if (busStop.direction == 'bidirectional' &&
+          busStop.busStopIndices != null) {
+        _showDirectionSelectionDialog(busStop, selectedBus);
         return;
       }
 
       setState(() {
-        // Update the selected bus stop state
         ref.read(selectedBusStopProvider.notifier).state = busStop;
         print("DEBUG: Updated selectedBusStopProvider state");
       });
 
-      // Move camera to the selected stop
       _mapController.animateCamera(
         CameraUpdate.newLatLng(busStop.coordinates),
       );
@@ -837,14 +870,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
   void _showDirectionSelectionDialog(BusStop busStop, String selectedBus) {
     if (_isDialogVisible) return;
-
-    final busRoute = busStop.busRoutes![selectedBus];
-    if (busRoute == null) return;
-
     setState(() {
       _isDialogVisible = true;
     });
-
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -855,35 +883,54 @@ class TrackBusState extends ConsumerState<TrackBus> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('This is a bus station with multiple directions.'),
-              Text('Please select your destination:'),
+              Text('This stop is bidirectional. Please select your direction:'),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
                   setState(() {
-                    ref.read(selectedBusStopProvider.notifier).state = busStop;
+                    // Create a new BusStop with direction and busStopIndex set for Northbound
+                    final updatedStop = BusStop(
+                      coordinates: busStop.coordinates,
+                      address: busStop.address,
+                      type: busStop.type,
+                      direction: 'Northbound',
+                      busStopIndex: busStop.busStopIndices?['northbound'],
+                      busStopIndices: busStop.busStopIndices,
+                    );
+                    ref.read(selectedBusStopProvider.notifier).state =
+                        updatedStop;
                     _mapController.animateCamera(
                       CameraUpdate.newLatLng(busStop.coordinates),
                     );
+                    startBusTracking(selectedBus, updatedStop);
                   });
-                  startBusTracking(selectedBus, busStop);
                 },
-                child: Text('To ${busRoute['Northbound']}'),
+                child: const Text('Northbound'),
               ),
               const SizedBox(height: 8),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
                   setState(() {
-                    ref.read(selectedBusStopProvider.notifier).state = busStop;
+                    // Create a new BusStop with direction and busStopIndex set for Southbound
+                    final updatedStop = BusStop(
+                      coordinates: busStop.coordinates,
+                      address: busStop.address,
+                      type: busStop.type,
+                      direction: 'Southbound',
+                      busStopIndex: busStop.busStopIndices?['southbound'],
+                      busStopIndices: busStop.busStopIndices,
+                    );
+                    ref.read(selectedBusStopProvider.notifier).state =
+                        updatedStop;
                     _mapController.animateCamera(
                       CameraUpdate.newLatLng(busStop.coordinates),
                     );
+                    startBusTracking(selectedBus, updatedStop);
                   });
-                  startBusTracking(selectedBus, busStop);
                 },
-                child: Text('To ${busRoute['Southbound']}'),
+                child: const Text('Southbound'),
               ),
             ],
           ),
@@ -895,7 +942,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
                   _isDialogVisible = false;
                 });
               },
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
           ],
         );
@@ -958,6 +1005,12 @@ class TrackBusState extends ConsumerState<TrackBus> {
       print("DEBUG: Reset selectedBusStopProvider");
     });
 
+    // Set default company if not already set (for C5 bus, it's Rea Vaya)
+    if (busController.getBusCompany().isEmpty) {
+      busController.setBusComapny('Rea Vaya');
+      print("DEBUG: Set default bus company to 'Rea Vaya'");
+    }
+
     // Load the bus icon if needed
     if (busIcon == null) {
       busIcon = await BusController(ref).loadBusIcon();
@@ -968,6 +1021,10 @@ class TrackBusState extends ConsumerState<TrackBus> {
       _isTrackingUserLocation = false;
       print("DEBUG: Disabled user location tracking");
     });
+
+    // Reload bus stops for the selected bus - this will try API first, then fallback to JSON
+    print("DEBUG: Fetching bus stops from server for bus: $busNumber, company: ${busController.getBusCompany()}");
+    await _loadBusStopsAndMarkers();
 
     print("DEBUG: Bus selection complete - ready for bus stop selection");
   }
@@ -1236,14 +1293,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
                 });
               },
               onSearchPressed: () {},
-              onBusSelected: (String busNumber) {
-                final selectedBusStop = ref.read(selectedBusStopProvider);
-                if (selectedBusStop != null) {
-                  startBusTracking(busNumber, selectedBusStop);
-                }
-                _busTrackingController
-                    .changeScreenState(ScreenState.locationSelection);
-              },
+              onBusSelected: onBusSelected,
             ),
           ],
           if (widget.currentScreen == 'where to') ...[
@@ -1275,65 +1325,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
                 selectedBus: selectedBus,
                 onConfirm: () {
                   if (selectedBusStop != null) {
-                    final busAvailable =
-                        _busTrackingController.validateBusAtStop(
-                      selectedBusStop,
-                      selectedBus,
-                    );
-
-                    if (!busAvailable) {
-                      showDialog(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (BuildContext context) {
-                          return AlertDialog(
-                            title: const Text('Bus Not Available at This Stop'),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                    'Bus $selectedBus does not stop at this location.'),
-                                const SizedBox(height: 8),
-                                const Text('Available buses at this stop:'),
-                                const SizedBox(height: 4),
-                                Text(selectedBusStop.busNumbers.join(', ')),
-                              ],
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () {
-                                  _busTrackingController
-                                      .changeScreenState(ScreenState.searchBus);
-                                  Navigator.pop(context);
-                                },
-                                child: const Text('Change Bus'),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                },
-                                child: const Text('Different Stop'),
-                              ),
-                              ElevatedButton(
-                                onPressed: () {
-                                  _busTrackingController.selectBus(
-                                      selectedBusStop.busNumbers.first);
-                                  startBusTracking(
-                                    selectedBusStop.busNumbers.first,
-                                    selectedBusStop,
-                                  );
-                                  Navigator.pop(context);
-                                },
-                                child: const Text('Use Available Bus'),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    } else {
-                      startBusTracking(selectedBus, selectedBusStop);
-                    }
+                    startBusTracking(selectedBus, selectedBusStop);
                   }
                 },
               ),
@@ -1341,7 +1333,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
           ],
           if (currentScreenState == ScreenState.tracking) ...[
             BottomTrackingSheet(
-              filteredBuses: selectedBusStop?.busNumbers ?? [],
+              filteredBuses: [],
               searchController: _searchController,
               onSearchChanged: (String value) {},
               onSearchPressed: () {},

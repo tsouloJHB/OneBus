@@ -124,7 +124,7 @@ class BusCommunicationServices {
 
   static Future<List<dynamic>> loadJsonData() async {
     String jsonString =
-        await rootBundle.loadString('lib/models/data/busStops.json');
+        await rootBundle.loadString('lib/models/data/reayVaya5cRoute.json');
     var jsonData = json.decode(jsonString);
     return jsonData['bus_stops'];
   }
