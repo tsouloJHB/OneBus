@@ -989,6 +989,130 @@ class TrackBusState extends ConsumerState<TrackBus> {
   void onBusSelected(String busNumber) async {
     print("DEBUG: onBusSelected called with bus number: $busNumber");
 
+    // Set default company if not already set (for C5 bus, it's Rea Vaya)
+    if (busController.getBusCompany().isEmpty) {
+      busController.setBusComapny('Rea Vaya');
+      print("DEBUG: Set default bus company to 'Rea Vaya'");
+    }
+
+    // Show direction selection dialog
+    _showRouteDirectionSelectionDialog(busNumber, busController.getBusCompany());
+  }
+
+  Future<void> _showRouteDirectionSelectionDialog(String busNumber, String companyName) async {
+    try {
+      // Show loading dialog while fetching directions
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Text('Loading route directions...'),
+              ],
+            ),
+          );
+        },
+      );
+
+      // Fetch route directions from the server
+      final routeData = await BusRouteService.getRouteDirections(busNumber, companyName);
+      
+      if (!mounted) return;
+      
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      if (routeData == null || routeData['routes'] == null) {
+        // Fallback to continue without direction selection
+        await _continueWithBusSelection(busNumber, null);
+        return;
+      }
+
+      final routes = routeData['routes'] as List<dynamic>;
+      final directions = routeData['directions'] as List<dynamic>? ?? [];
+
+      if (routes.isEmpty) {
+        // Fallback to continue without direction selection
+        await _continueWithBusSelection(busNumber, null);
+        return;
+      }
+
+      // Show direction selection dialog
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Select Direction for Bus $busNumber'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: directions.map<Widget>((direction) {
+                // Find route for this direction
+                final route = routes.firstWhere(
+                  (r) => r['direction'] == direction,
+                  orElse: () => null,
+                );
+
+                final routeName = route?['routeName'] ?? 'Route';
+                final description = route?['description'] ?? 'No description available';
+                final startPoint = route?['startPoint'] ?? '';
+                final endPoint = route?['endPoint'] ?? '';
+
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Card(
+                    child: ListTile(
+                      title: Text(
+                        '$direction - $routeName',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (startPoint.isNotEmpty && endPoint.isNotEmpty)
+                            Text('$startPoint → $endPoint'),
+                          const SizedBox(height: 4),
+                          Text(description),
+                        ],
+                      ),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        _continueWithBusSelection(busNumber, direction);
+                      },
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      
+      // Close loading dialog if open
+      Navigator.of(context).pop();
+      
+      print('[ERROR] Failed to load route directions: $e');
+      
+      // Show error and continue without direction selection
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to load route directions. Continuing with default route.'),
+        ),
+      );
+      
+      await _continueWithBusSelection(busNumber, null);
+    }
+  }
+
+  Future<void> _continueWithBusSelection(String busNumber, String? selectedDirection) async {
+    print("DEBUG: Continuing with bus selection - Bus: $busNumber, Direction: $selectedDirection");
+
     setState(() {
       // Update the selected bus state using the new provider
       ref.read(selectedBusStateProvider.notifier).state = busNumber;
@@ -1005,12 +1129,6 @@ class TrackBusState extends ConsumerState<TrackBus> {
       print("DEBUG: Reset selectedBusStopProvider");
     });
 
-    // Set default company if not already set (for C5 bus, it's Rea Vaya)
-    if (busController.getBusCompany().isEmpty) {
-      busController.setBusComapny('Rea Vaya');
-      print("DEBUG: Set default bus company to 'Rea Vaya'");
-    }
-
     // Load the bus icon if needed
     if (busIcon == null) {
       busIcon = await BusController(ref).loadBusIcon();
@@ -1023,7 +1141,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
     });
 
     // Reload bus stops for the selected bus - this will try API first, then fallback to JSON
-    print("DEBUG: Fetching bus stops from server for bus: $busNumber, company: ${busController.getBusCompany()}");
+    // TODO: In the future, we could filter stops by selected direction
+    print("DEBUG: Fetching bus stops from server for bus: $busNumber, company: ${busController.getBusCompany()}, direction: $selectedDirection");
     await _loadBusStopsAndMarkers();
 
     print("DEBUG: Bus selection complete - ready for bus stop selection");

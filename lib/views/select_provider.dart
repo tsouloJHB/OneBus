@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:onebus/controllers/bus_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:onebus/controllers/bus_controller.dart';
+import 'package:onebus/services/bus_route_service.dart';
 
 import 'home.dart';
 
-class SelectProviderScreen extends ConsumerWidget {
-  final List<Map<String, String>> providers = [
+class SelectProviderScreen extends ConsumerStatefulWidget {
+  const SelectProviderScreen({Key? key}) : super(key: key);
+
+  @override
+  ConsumerState<SelectProviderScreen> createState() => _SelectProviderScreenState();
+}
+
+class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
+  // Local fallback providers
+  final List<Map<String, String>> _fallbackProviders = [
     {
       "name": "metrobus",
       "image": "assets/images/metrobus.png",
@@ -26,9 +35,44 @@ class SelectProviderScreen extends ConsumerWidget {
     },
   ];
 
+  List<Map<String, String>> _providers = [];
+  bool _loading = true;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    BusController busController = BusController(ref);
+  void initState() {
+    super.initState();
+    _loadProviders();
+  }
+
+  Future<void> _loadProviders() async {
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      // Fetch companies from backend endpoint `/api/bus-companies`
+      final serverProviders = await BusRouteService.getBusCompanies();
+      if (!mounted) return;
+      if (serverProviders.isNotEmpty) {
+        setState(() {
+          _providers = serverProviders;
+          _loading = false;
+        });
+        return;
+      }
+    } catch (e) {
+      // ignore and fall back to local providers
+    }
+    // Fallback to local providers
+    if (!mounted) return;
+    setState(() {
+      _providers = _fallbackProviders;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -57,117 +101,81 @@ class SelectProviderScreen extends ConsumerWidget {
               ),
               SizedBox(height: 20),
               Expanded(
-                child: ListView.builder(
-                  itemCount: providers.length,
-                  itemBuilder: (context, index) {
-                    final provider = providers[index];
-                    final imageHeight =
-                        double.tryParse(provider['height']!) ?? 80.0;
-                    final imageWidth =
-                        double.tryParse(provider['width']!) ?? 80.0;
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView.builder(
+                        itemCount: _providers.length,
+                        itemBuilder: (context, index) {
+                          final provider = _providers[index];
+                          final imageHeight =
+                              double.tryParse(provider['height'] ?? '') ?? 80.0;
+                          final imageWidth =
+                              double.tryParse(provider['width'] ?? '') ?? 80.0;
 
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 15.0),
-                      child: GestureDetector(
-                        onTap: () async {
-                          // Handle selection
-                          print('Selected: ${provider['name']}');
+                          return Padding(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 15.0),
+                            child: GestureDetector(
+                              onTap: () {
+                                final providerName = provider['name'] ?? '';
+                                final companyIdentifier = providerName;
 
-                          // Show loading dialog
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (BuildContext context) {
-                              return AlertDialog(
-                                content: Row(
-                                  children: [
-                                    CircularProgressIndicator(),
-                                    SizedBox(width: 20),
-                                    Text('Loading bus routes...'),
-                                  ],
-                                ),
-                              );
-                            },
-                          );
+                                // Set the selected company in the state
+                                ref.read(selectedBusCompanyState.notifier).state = companyIdentifier;
 
-                          try {
-                            // Set the bus company
-                            busController.setBusComapny(provider['name']!);
-
-                            // Fetch bus routes for the selected company
-                            final buses =
-                                await busController.getAvailableBuses();
-                            print(
-                                'Fetched ${buses.length} buses for ${provider['name']}');
-
-                            // Close loading dialog
-                            Navigator.of(context).pop();
-
-                            // Navigate to home screen
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) => const HomeScreen()),
-                            );
-                          } catch (e) {
-                            // Close loading dialog
-                            Navigator.of(context).pop();
-
-                            // Show error dialog
-                            showDialog(
-                              context: context,
-                              builder: (BuildContext context) {
-                                return AlertDialog(
-                                  title: Text('Error'),
-                                  content: Text(
-                                      'Failed to load bus routes. Using default list.'),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () {
-                                        Navigator.of(context).pop();
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                              builder: (context) =>
-                                                  const HomeScreen()),
-                                        );
-                                      },
-                                      child: Text('Continue'),
-                                    ),
-                                  ],
+                                // Navigate to home screen
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const HomeScreen()),
                                 );
                               },
-                            );
-                          }
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.transparent, // Transparent background
-                            border: Border.all(
-                              color: Colors.red, // Red border
-                              width: 2.0,
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          height: 120,
-                          width: 100,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Image.asset(
-                                provider['image']!,
-                                height: imageHeight,
-                                width: imageWidth,
-                                fit: BoxFit.cover,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.transparent,
+                                  border: Border.all(
+                                    color: Colors.red,
+                                    width: 2.0,
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                height: 120,
+                                width: double.infinity,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    // If server supplied an image URL, use NetworkImage; otherwise fall back to asset
+                                    (provider['image'] != null &&
+                                            provider['image']!
+                                                .startsWith('http'))
+                                        ? Image.network(
+                                            provider['image']!,
+                                            height: imageHeight,
+                                            width: imageWidth,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Image.asset(
+                                            provider['image'] ??
+                                                'assets/images/driverprovider.png',
+                                            height: imageHeight,
+                                            width: imageWidth,
+                                            fit: BoxFit.cover,
+                                          ),
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: Text(
+                                        provider['name'] ?? '',
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              SizedBox(width: 20),
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
             ],
           ),
