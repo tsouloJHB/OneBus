@@ -790,28 +790,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
         _busStops = busStops;
         markers.clear();
 
-        // Add bus stop markers
+        // Add bus stop markers using centralized helper
         for (var busStop in busStops) {
-          final markerId = MarkerId(
-              'bus_stop_${busStop.coordinates.latitude}_${busStop.coordinates.longitude}');
-          final marker = Marker(
-            markerId: markerId,
-            position: busStop.coordinates,
-            icon: customMarkerIcon ?? BitmapDescriptor.defaultMarker,
-            infoWindow: InfoWindow(
-              title: '${busStop.type} (${busStop.direction ?? ""})',
-              snippet: busStop.address,
-            ),
-            consumeTapEvents: true,
-            onTap: () {
-              print(
-                  "DEBUG: Marker tapped for bus stop at ${busStop.coordinates}");
-              print("DEBUG: Available buses: ${busStop.direction}");
-              print(
-                  "DEBUG: Current selected bus: ${ref.read(selectedBusStateProvider)}");
-              _handleBusStopSelection(busStop);
-            },
-          );
+          final marker = _createStopMarker(busStop);
           markers.add(marker);
           print("DEBUG: Added marker for bus stop at ${busStop.coordinates}");
         }
@@ -954,6 +935,386 @@ class TrackBusState extends ConsumerState<TrackBus> {
     });
   }
 
+  // Enhanced method to create stop markers with direction-based colors and highlighting
+  Marker _createStopMarker(BusStop busStop, {bool isHighlighted = false}) {
+    final direction = busStop.direction ?? 'unknown';
+    final index = _getDisplayIndex(busStop);
+    
+    // Determine marker color based on highlight status and direction
+    BitmapDescriptor markerIcon;
+    if (isHighlighted) {
+      markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow);
+    } else {
+      switch (direction.toLowerCase()) {
+        case 'northbound':
+          markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue);
+          break;
+        case 'southbound':
+          markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+          break;
+        case 'bidirectional':
+          markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+          break;
+        default:
+          markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
+      }
+    }
+
+    return Marker(
+      markerId: MarkerId('stop_${busStop.coordinates.latitude}_${busStop.coordinates.longitude}'),
+      position: busStop.coordinates,
+      icon: markerIcon,
+      infoWindow: InfoWindow(
+        title: '${isHighlighted ? '🚌 ' : ''}Stop $index',
+        snippet: '${busStop.address} • $direction',
+        onTap: () => _handleBusStopSelection(busStop),
+      ),
+      onTap: () => _handleBusStopSelection(busStop),
+    );
+  }
+
+  // Get display index for bus stop
+  String _getDisplayIndex(BusStop busStop) {
+    if (busStop.busStopIndex != null) {
+      return busStop.busStopIndex.toString();
+    }
+    if (busStop.busStopIndices != null) {
+      final indices = busStop.busStopIndices!;
+      if (indices.containsKey('northbound') && indices.containsKey('southbound')) {
+        return '${indices['northbound']}/${indices['southbound']}';
+      }
+      return indices.values.first.toString();
+    }
+    return '?';
+  }
+
+  // Enhanced method to filter and display stops based on current route
+  void _filterStopsByRoute(String? routeId) {
+    if (routeId == null) {
+      _updateAllMarkers();
+      return;
+    }
+
+    setState(() {
+      markers.clear();
+      
+      // Filter bus stops for the current route
+      final routeStops = _busStops.where((stop) {
+        // Check if stop is associated with this route
+        return stop.busStopIndices?.containsKey(routeId) == true ||
+               stop.type?.toLowerCase().contains(routeId.toLowerCase()) == true;
+      }).toList();
+      
+      // Add filtered stop markers
+      for (var busStop in routeStops) {
+        final marker = _createStopMarker(busStop);
+        markers.add(marker);
+      }
+      
+      // Add user location marker if available
+      if (_currentLocation != null) {
+        _updateUserLocationMarker(_currentLocation!);
+      }
+    });
+    
+    print("DEBUG: Filtered ${markers.length - 1} stops for route: $routeId");
+  }
+
+  // Method to highlight the nearest stops to current bus location
+  void _highlightNearestStops(LatLng busLocation) {
+    if (_busStops.isEmpty) return;
+
+    // Find stops within 500 meters of the bus
+    final nearbyStops = _busStops.where((stop) {
+      final distance = _calculateDistance(busLocation, stop.coordinates);
+      return distance <= 0.5; // 500 meters
+    }).toList();
+
+    // Sort by distance
+    nearbyStops.sort((a, b) {
+      final distanceA = _calculateDistance(busLocation, a.coordinates);
+      final distanceB = _calculateDistance(busLocation, b.coordinates);
+      return distanceA.compareTo(distanceB);
+    });
+
+    // Update markers with highlighted nearby stops
+    setState(() {
+      markers.removeWhere((marker) => marker.markerId.value.startsWith('stop_'));
+      
+      for (var busStop in _busStops) {
+        final isNearby = nearbyStops.contains(busStop);
+        final marker = _createStopMarker(busStop, isHighlighted: isNearby);
+        markers.add(marker);
+      }
+    });
+
+    print("DEBUG: Highlighted ${nearbyStops.length} nearby stops");
+  }
+
+  // Enhanced method to clear and update all markers
+  void _updateAllMarkers() {
+    setState(() {
+      markers.clear();
+      
+      // Add all bus stop markers
+      for (var busStop in _busStops) {
+        final marker = _createStopMarker(busStop);
+        markers.add(marker);
+      }
+      
+      // Add user location marker if available
+      if (_currentLocation != null) {
+        _updateUserLocationMarker(_currentLocation!);
+      }
+      
+      // Add bus location markers if tracking
+      // Add any other markers as needed
+    });
+    
+    print("DEBUG: Updated all markers - total: ${markers.length}");
+  }
+
+  // Show detailed information about the selected bus stop
+  void _showBusStopDetails(BusStop busStop) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.4,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Stop header
+              Row(
+                children: [
+                  Icon(
+                    Icons.bus_alert,
+                    color: _getStopColorByDirection(busStop.direction ?? ''),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      busStop.type ?? 'Bus Stop',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              // Address
+              Text(
+                busStop.address ?? 'Unknown address',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Stop indices information
+              if (busStop.busStopIndices != null || busStop.busStopIndex != null)
+                _buildStopIndicesInfo(busStop),
+              
+              // Direction information
+              if (busStop.direction != null) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Icon(
+                      _getDirectionIcon(busStop.direction!),
+                      color: _getStopColorByDirection(busStop.direction!),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Direction: ${busStop.direction}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              
+              const Spacer(),
+              
+              // Action buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _navigateToStop(busStop);
+                      },
+                      icon: const Icon(Icons.navigation),
+                      label: const Text('Navigate'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _shareStopLocation(busStop);
+                      },
+                      icon: const Icon(Icons.share),
+                      label: const Text('Share'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Build stop indices information widget
+  Widget _buildStopIndicesInfo(BusStop busStop) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Stop Information',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (busStop.busStopIndices != null) ...[
+            if (busStop.busStopIndices!['northbound'] != null)
+              _buildIndexRow('Northbound', busStop.busStopIndices!['northbound']!, Colors.blue),
+            if (busStop.busStopIndices!['southbound'] != null)
+              _buildIndexRow('Southbound', busStop.busStopIndices!['southbound']!, Colors.red),
+          ] else if (busStop.busStopIndex != null) ...[
+            _buildIndexRow('Stop Index', busStop.busStopIndex!, Colors.orange),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Build individual index row
+  Widget _buildIndexRow(String label, int index, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$label: $index',
+            style: const TextStyle(fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Get color based on direction
+  Color _getStopColorByDirection(String direction) {
+    switch (direction.toLowerCase()) {
+      case 'northbound':
+        return Colors.blue;
+      case 'southbound':
+        return Colors.red;
+      case 'bidirectional':
+        return Colors.green;
+      default:
+        return Colors.orange;
+    }
+  }
+
+  // Get icon based on direction
+  IconData _getDirectionIcon(String direction) {
+    switch (direction.toLowerCase()) {
+      case 'northbound':
+        return Icons.north;
+      case 'southbound':
+        return Icons.south;
+      case 'eastbound':
+        return Icons.east;
+      case 'westbound':
+        return Icons.west;
+      case 'bidirectional':
+        return Icons.swap_vert;
+      default:
+        return Icons.location_on;
+    }
+  }
+
+  // Navigate to the selected stop
+  void _navigateToStop(BusStop busStop) {
+    // Implement navigation logic here
+    // This could integrate with Google Maps, Apple Maps, or in-app navigation
+    print("DEBUG: Navigate to ${busStop.address} at ${busStop.coordinates}");
+    
+    // Example: Open in Google Maps
+    // final url = 'https://www.google.com/maps/dir/?api=1&destination=${busStop.coordinates.latitude},${busStop.coordinates.longitude}';
+    // launchUrl(Uri.parse(url));
+  }
+
+  // Share stop location
+  void _shareStopLocation(BusStop busStop) {
+    // Implement sharing logic here
+    final text = 'Bus Stop: ${busStop.address}\nLocation: ${busStop.coordinates.latitude}, ${busStop.coordinates.longitude}';
+    print("DEBUG: Share stop location: $text");
+    
+    // Example using share_plus package:
+    // Share.share(text);
+  }
+
   Future<void> _createMarkerIcon() async {
     _busStopsCoordinates = await BusCommunicationServices.getBusStopsFromJson();
     markers.addAll(_busStopMarkers);
@@ -1045,48 +1406,250 @@ class TrackBusState extends ConsumerState<TrackBus> {
       if (!mounted) return;
       showDialog(
         context: context,
+        barrierDismissible: true,
         builder: (BuildContext context) {
-          return AlertDialog(
-            title: Text('Select Direction for Bus $busNumber'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: directions.map<Widget>((direction) {
-                // Find route for this direction
-                final route = routes.firstWhere(
-                  (r) => r['direction'] == direction,
-                  orElse: () => null,
-                );
-
-                final routeName = route?['routeName'] ?? 'Route';
-                final description = route?['description'] ?? 'No description available';
-                final startPoint = route?['startPoint'] ?? '';
-                final endPoint = route?['endPoint'] ?? '';
-
-                return Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Card(
-                    child: ListTile(
-                      title: Text(
-                        '$direction - $routeName',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (startPoint.isNotEmpty && endPoint.isNotEmpty)
-                            Text('$startPoint → $endPoint'),
-                          const SizedBox(height: 4),
-                          Text(description),
-                        ],
-                      ),
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        _continueWithBusSelection(busNumber, direction);
-                      },
-                    ),
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.red.shade50,
+                    Colors.white,
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    spreadRadius: 3,
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
-                );
-              }).toList(),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header with bus icon and title
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.red.withOpacity(0.3),
+                                spreadRadius: 2,
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.directions_bus,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Select Direction',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                              Text(
+                                'Bus $busNumber',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    // Direction options
+                    ...directions.map<Widget>((direction) {
+                      final route = routes.firstWhere(
+                        (r) => r['direction'] == direction,
+                        orElse: () => null,
+                      );
+
+                      final routeName = route?['routeName'] ?? 'Route';
+                      final description = route?['description'] ?? 'No description available';
+                      final startPoint = route?['startPoint'] ?? '';
+                      final endPoint = route?['endPoint'] ?? '';
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            _continueWithBusSelection(busNumber, direction);
+                          },
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.grey.shade200,
+                                width: 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.grey.withOpacity(0.1),
+                                  spreadRadius: 1,
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                // Direction icon
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: direction.toLowerCase().contains('north')
+                                        ? Colors.blue.shade50
+                                        : Colors.orange.shade50,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    direction.toLowerCase().contains('north')
+                                        ? Icons.north
+                                        : Icons.south,
+                                    color: direction.toLowerCase().contains('north')
+                                        ? Colors.blue
+                                        : Colors.orange,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                // Route info
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '$direction - $routeName',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      if (startPoint.isNotEmpty && endPoint.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.trip_origin,
+                                              size: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              startPoint,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.location_on,
+                                              size: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              endPoint,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                      if (description != 'No description available') ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          description,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[500],
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                // Arrow icon
+                                Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 16,
+                                  color: Colors.grey[400],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    const SizedBox(height: 16),
+                    // Cancel button
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           );
         },
@@ -1319,13 +1882,15 @@ class TrackBusState extends ConsumerState<TrackBus> {
             if (currentScreenState == ScreenState.tracking &&
                 _mapController != null &&
                 busData.coordinates != null) {
-              print("DEBUG: Moving camera to follow bus");
+              print("DEBUG: Moving camera to follow bus at ${busData.coordinates}");
               _mapController.animateCamera(
                 CameraUpdate.newLatLngZoom(
                   busData.coordinates!,
                   _getZoomLevel(currentScreenState),
                 ),
               );
+            } else {
+              print("DEBUG: Not moving camera - screenState: $currentScreenState, controller: ${_mapController != null}, coords: ${busData.coordinates}");
             }
 
             // Only update distance/ETA if we're in tracking mode and have a selected bus stop

@@ -31,10 +31,14 @@ class BusCommunicationServices {
 
   static void _updateSimulatedPosition(String busNumber) {
     final currentPos = _getSimulatedPosition(busNumber);
-    // Simulate movement
+    // Simulate realistic movement along a route (small increments)
+    final random = DateTime.now().millisecondsSinceEpoch;
+    final latIncrement = (random % 20 - 10) / 100000.0; // -0.0001 to +0.0001 degrees
+    final lngIncrement = (random % 20 - 10) / 100000.0; // Small realistic movements
+    
     final newPos = LatLng(
-      currentPos.latitude + (DateTime.now().millisecond / 10000),
-      currentPos.longitude + (DateTime.now().millisecond / 10000),
+      (currentPos.latitude + latIncrement).clamp(-26.3, -26.1), // Keep in Johannesburg area
+      (currentPos.longitude + lngIncrement).clamp(27.8, 28.2),  // Keep in Johannesburg area
     );
     _simulatedBusPositions[busNumber] = newPos;
   }

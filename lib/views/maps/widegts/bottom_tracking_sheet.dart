@@ -35,8 +35,8 @@ class BottomTrackingSheet extends ConsumerWidget {
 
     return DraggableScrollableSheet(
       initialChildSize: 0.4,
-      minChildSize: 0.1,
-      maxChildSize: 0.7,
+      minChildSize: 0.12,
+      maxChildSize: 0.75,
       builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
@@ -44,25 +44,34 @@ class BottomTrackingSheet extends ConsumerWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Colors.red.shade100,
+                Colors.red.shade50,
                 Colors.white,
               ],
             ),
             borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(46.0),
-              topRight: Radius.circular(46.0),
+              topLeft: Radius.circular(30.0),
+              topRight: Radius.circular(30.0),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                spreadRadius: 0,
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
           ),
           child: Column(
             children: [
+              // Modern drag handle
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10.0),
+                padding: const EdgeInsets.symmetric(vertical: 12.0),
                 child: Container(
-                  width: 50,
-                  height: 5,
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(10),
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
@@ -80,141 +89,188 @@ class BottomTrackingSheet extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Bus number, status, and action buttons in one row
-                        Row(
-                          children: [
-                            // Bus number
-                            Text(
-                              busTrackingState?.selectedBus ??
-                                  'No Bus Selected',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
+                        // Header with bus info and actions
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Colors.red.shade50,
+                                Colors.white,
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            // Status badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _getStatusColor(
-                                        busTrackingState?.arrivalStatus ??
-                                            'On Time')
-                                    .withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (_shouldPulse(
-                                      busTrackingState?.arrivalStatus ??
-                                          'On Time'))
-                                    Icon(
-                                      _getStatusIcon(
-                                          busTrackingState?.arrivalStatus ??
-                                              'On Time'),
-                                      color: _getStatusColor(
-                                          busTrackingState?.arrivalStatus ??
-                                              'On Time'),
-                                      size: 12,
-                                    ),
-                                  if (_shouldPulse(
-                                      busTrackingState?.arrivalStatus ??
-                                          'On Time'))
-                                    const SizedBox(width: 4),
-                                  Text(
-                                    busTrackingState?.arrivalStatus ??
-                                        'On Time',
-                                    style: TextStyle(
-                                      color: _getStatusColor(
-                                          busTrackingState?.arrivalStatus ??
-                                              'On Time'),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Spacer(),
-                            // Action buttons - only show if bus hasn't arrived
-                            if (!busHasArrived)
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.red.shade100),
+                          ),
+                          child: Column(
+                            children: [
                               Row(
                                 children: [
-                                  // Change Bus Button
+                                  // Bus icon with background
                                   Container(
+                                    padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: Colors.white,
+                                      color: Colors.red,
                                       borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                          color: Colors.blue, width: 1.5),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.grey.withOpacity(0.2),
+                                          color: Colors.red.withOpacity(0.3),
                                           spreadRadius: 1,
-                                          blurRadius: 2,
-                                          offset: const Offset(1, 1),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
                                         ),
                                       ],
                                     ),
-                                    child: IconButton(
-                                      onPressed: onChangeBus,
-                                      icon: const Icon(Icons.swap_horiz,
-                                          color: Colors.blue, size: 18),
-                                      tooltip: 'Change Bus',
-                                      padding: const EdgeInsets.all(6),
-                                      constraints: const BoxConstraints(
-                                        minWidth: 22,
-                                        minHeight: 22,
-                                      ),
+                                    child: const Icon(
+                                      Icons.directions_bus,
+                                      color: Colors.white,
+                                      size: 20,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  // Return to Home Button
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                          color: Colors.red, width: 1.5),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.grey.withOpacity(0.2),
-                                          spreadRadius: 1,
-                                          blurRadius: 2,
-                                          offset: const Offset(1, 1),
+                                  const SizedBox(width: 16),
+                                  // Bus info
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Bus ${busTrackingState?.selectedBus ?? 'N/A'}',
+                                          style: const TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        // Status badge
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _getStatusColor(
+                                                    busTrackingState?.arrivalStatus ??
+                                                        'On Time')
+                                                .withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(20),
+                                            border: Border.all(
+                                              color: _getStatusColor(
+                                                  busTrackingState?.arrivalStatus ??
+                                                      'On Time'),
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                _getStatusIcon(
+                                                    busTrackingState?.arrivalStatus ??
+                                                        'On Time'),
+                                                color: _getStatusColor(
+                                                    busTrackingState?.arrivalStatus ??
+                                                        'On Time'),
+                                                size: 14,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                busTrackingState?.arrivalStatus ??
+                                                    'On Time',
+                                                style: TextStyle(
+                                                  color: _getStatusColor(
+                                                      busTrackingState?.arrivalStatus ??
+                                                          'On Time'),
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),
-                                    child: IconButton(
-                                      onPressed: () {
-                                        // Clear all tracking state before returning to home
-                                        BusTrackingController(ref)
-                                            .clearAllTrackingState();
-                                        Navigator.pushAndRemoveUntil(
-                                          context,
-                                          MaterialPageRoute(
-                                              builder: (context) =>
-                                                  const HomeScreen()),
-                                          (route) => false,
-                                        );
-                                      },
-                                      icon: const Icon(Icons.home,
-                                          color: Colors.red, size: 18),
-                                      tooltip: 'Return to Home',
-                                      padding: const EdgeInsets.all(6),
-                                      constraints: const BoxConstraints(
-                                        minWidth: 12,
-                                        minHeight: 12,
-                                      ),
-                                    ),
                                   ),
+                                  // Action buttons - only show if bus hasn't arrived
+                                  if (!busHasArrived)
+                                    Column(
+                                      children: [
+                                        // Change Bus Button
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(
+                                                color: Colors.red.shade300, width: 1),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.grey.withOpacity(0.1),
+                                                spreadRadius: 1,
+                                                blurRadius: 3,
+                                                offset: const Offset(0, 1),
+                                              ),
+                                            ],
+                                          ),
+                                          child: IconButton(
+                                            onPressed: onChangeBus,
+                                            icon: const Icon(Icons.swap_horiz,
+                                                color: Colors.red, size: 18),
+                                            tooltip: 'Change Bus',
+                                            padding: const EdgeInsets.all(8),
+                                            constraints: const BoxConstraints(
+                                              minWidth: 36,
+                                              minHeight: 36,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        // Return to Home Button
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(
+                                                color: Colors.grey.shade300, width: 1),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.grey.withOpacity(0.1),
+                                                spreadRadius: 1,
+                                                blurRadius: 3,
+                                                offset: const Offset(0, 1),
+                                              ),
+                                            ],
+                                          ),
+                                          child: IconButton(
+                                            onPressed: () {
+                                              // Clear all tracking state before returning to home
+                                              BusTrackingController(ref)
+                                                  .clearAllTrackingState();
+                                              Navigator.pushAndRemoveUntil(
+                                                context,
+                                                MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        const HomeScreen()),
+                                                (route) => false,
+                                              );
+                                            },
+                                            icon: Icon(Icons.home,
+                                                color: Colors.grey[600], size: 18),
+                                            tooltip: 'Return to Home',
+                                            padding: const EdgeInsets.all(8),
+                                            constraints: const BoxConstraints(
+                                              minWidth: 36,
+                                              minHeight: 36,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                 ],
                               ),
-                          ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 10),
                         // Show arrival message when bus has arrived
@@ -308,46 +364,135 @@ class BottomTrackingSheet extends ConsumerWidget {
                           ],
                         ),
                         const SizedBox(height: 5),
-                        // Info cards with shadow - only show if bus hasn't arrived
+                        // Trip info cards - only show if bus hasn't arrived
                         if (!busHasArrived) ...[
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(15),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withOpacity(0.2),
-                                  spreadRadius: 1,
-                                  blurRadius: 2,
-                                  offset: const Offset(1, 1),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              // Time card
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Colors.blue.shade50,
+                                        Colors.white,
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.blue.shade100),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.blue.withOpacity(0.1),
+                                        spreadRadius: 1,
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Icon(
+                                          Icons.access_time,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        busTrackingState?.estimatedArrivalTime != null
+                                            ? '${busTrackingState!.estimatedArrivalTime.round()} min'
+                                            : 'N/A',
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Estimated',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ],
-                            ),
-                            padding: const EdgeInsets.all(12),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                _buildInfoColumn(
-                                  'Estimated',
-                                  busTrackingState?.estimatedArrivalTime != null
-                                      ? '${busTrackingState!.estimatedArrivalTime.round()} min'
-                                      : 'N/A',
-                                  Icons.access_time,
+                              ),
+                              const SizedBox(width: 12),
+                              // Distance card
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Colors.green.shade50,
+                                        Colors.white,
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.green.shade100),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.green.withOpacity(0.1),
+                                        spreadRadius: 1,
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Icon(
+                                          Icons.straighten,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        busTrackingState?.distance != null
+                                            ? '${busTrackingState!.distance.toStringAsFixed(1)} km'
+                                            : 'N/A',
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Distance',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                Container(
-                                  height: 30,
-                                  width: 1,
-                                  color: Colors.grey[300],
-                                ),
-                                _buildInfoColumn(
-                                  'Distance',
-                                  busTrackingState?.distance != null
-                                      ? '${busTrackingState!.distance.toStringAsFixed(1)} km'
-                                      : 'N/A',
-                                  Icons.directions_bus,
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ],
                         // Action buttons when bus has arrived
@@ -482,51 +627,7 @@ class BottomTrackingSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildInfoColumn(String label, String value, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.blue, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.grey,
-            fontSize: 10,
-          ),
-        ),
-        const SizedBox(height: 2),
-        value == 'N/A'
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'Loading...',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ],
-              )
-            : Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-      ],
-    );
-  }
+
 
   Color _getStatusColor(String status) {
     switch (status) {
@@ -604,15 +705,7 @@ class BottomTrackingSheet extends ConsumerWidget {
     }
   }
 
-  bool _shouldPulse(String status) {
-    switch (status) {
-      case 'Arriving':
-      case 'Bus has arrived':
-        return true;
-      default:
-        return false;
-    }
-  }
+
 
   IconData _getStatusIcon(String status) {
     switch (status) {
