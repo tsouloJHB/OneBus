@@ -82,6 +82,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
   double _currentBusBearing = 0.0;
   Map<double, BitmapDescriptor> _rotatedBusIcons = {};
   bool _isStreamActive = false; // Add flag to control stream activity
+  bool _isLoadingDialogVisible = false;
+  ProviderSubscription<AsyncValue<BusLocationData>>? _busStreamSubscription;
 
   @override
   void initState() {
@@ -112,48 +114,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
             ScreenState.locationSelection;
         ref.read(locationScreenStateProvider.notifier).state = true;
         ref.read(locationScreenStepProvider.notifier).state = 1;
-
-        // Ensure we clear any state that might trigger dialogs
-        setState(() {
-          _busStops = [];
-          markers.clear();
-          _hasCheckedProximity = true; // Set to true to prevent checks
-          _isDialogVisible = false;
-        });
-      }
-
-      // Restore tracking state if needed
-      final busTracking = ref.read(busTrackingProvider);
-      if (busTracking != null) {
-        ref.read(busTrackingProvider.notifier).restoreTracking();
       }
     });
-
-    startLocation();
-  }
-
-  @override
-  void didUpdateWidget(TrackBus oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    print("DEBUG: didUpdateWidget called");
-
-    final currentScreenState = ref.read(currentScreenStateProvider);
-    final selectedBusStop = ref.read(selectedBusStopProvider);
-    final currentBusLocation = ref.read(currentBusLocationProvider);
-
-    if (currentScreenState == ScreenState.tracking &&
-        selectedBusStop != null &&
-        currentBusLocation != null) {
-      print(
-          "DEBUG: Widget updated in tracking mode with valid bus stop and location");
-      // Use a short delay to ensure all providers are properly initialized
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) {
-          _updateDistanceAndETA(currentBusLocation, selectedBusStop);
-        }
-      });
-    }
   }
 
   Future<void> _initializeBuses() async {
@@ -413,6 +375,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
       _isStreamActive = false;
     });
 
+    _hideLoadingDialog();
+
     // Clear all tracking state comprehensively
     ref.read(busTrackingProvider.notifier).clearAllTrackingState();
 
@@ -458,6 +422,112 @@ class TrackBusState extends ConsumerState<TrackBus> {
         ),
       ),
     );
+  }
+
+  void _showNoServiceDialog(String errorMessage) {
+    if (!mounted || _isDialogVisible) return;
+    
+    setState(() {
+      _isDialogVisible = true;
+    });
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          icon: Icon(Icons.error_outline, color: Colors.red, size: 48),
+          title: const Text('Service Unavailable'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                errorMessage,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info, color: Colors.orange.shade700, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Please check your internet connection or try again later.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.orange.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _isDialogVisible = false;
+                });
+                // Go back to bus selection
+                ref.read(currentScreenStateProvider.notifier).state = ScreenState.searchBus;
+                _stopTracking(changeScreenState: false);
+              },
+              child: const Text('Go Back'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _isDialogVisible = false;
+                });
+                // Try again by resetting the stream
+                _isStreamActive = true;
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+              child: const Text('Try Again'),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      setState(() {
+        _isDialogVisible = false;
+      });
+    });
+  }
+
+  void _showLoadingDialog() {
+    if (!mounted || _isLoadingDialogVisible) return;
+    _isLoadingDialogVisible = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    ).then((_) {
+      _isLoadingDialogVisible = false;
+    });
+  }
+
+  void _hideLoadingDialog() {
+    if (_isLoadingDialogVisible) {
+      Navigator.of(context, rootNavigator: true).maybePop();
+      _isLoadingDialogVisible = false;
+    }
   }
 
   Future<String> _getAddressFromLatLng(LatLng latLng) async {
@@ -1338,6 +1408,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
   @override
   void dispose() {
     _locationSubscription?.cancel();
+    _busStreamSubscription?.close();
     _searchController.dispose();
     _mapController.dispose();
     // Clear rotated bus icons cache to prevent memory leaks
@@ -1811,10 +1882,39 @@ class TrackBusState extends ConsumerState<TrackBus> {
           'longitude': _currentLocation!.longitude,
         }),
         (previous, next) {
+          // Handle errors
+          if (next.hasError) {
+            final error = next.error;
+            final stackTrace = next.stackTrace;
+            print('[ERROR] Bus tracking stream error: $error');
+            if (!_isStreamActive) return;
+            
+            String errorMessage = 'Unable to connect to bus tracking service';
+            if (error.toString().contains('timeout')) {
+              errorMessage = 'Connection timeout. The server may be offline. Please try again later.';
+            } else if (error.toString().contains('internet') || error.toString().contains('Connection refused')) {
+              errorMessage = 'No internet connection. Please check your connection and try again.';
+            }
+            
+            _showNoServiceDialog(errorMessage);
+            setState(() {
+              _isStreamActive = false;
+            });
+            return;
+          }
+          
+          // Handle loading
+          if (next.isLoading) {
+            print('[DEBUG] Bus tracking stream loading...');
+            return;
+          }
+          
+          // Handle data
           next.whenData((busData) {
             if (!_isStreamActive) return; // Only process if stream is active
+            _hideLoadingDialog();
             print(
-                "DEBUG: Received bus location update:  {busData.coordinates}");
+                "DEBUG: Received bus location update: ${busData.coordinates}");
 
             // Update the current bus location in the provider
             ref.read(currentBusLocationProvider.notifier).state =
@@ -2015,7 +2115,10 @@ class TrackBusState extends ConsumerState<TrackBus> {
               ),
             ),
           ],
-          if (currentScreenState == ScreenState.tracking) ...[
+          // Only show tracking sheet when we have an active stream and a real bus location
+          if (currentScreenState == ScreenState.tracking &&
+              _isStreamActive &&
+              currentBusLocation != null) ...[
             BottomTrackingSheet(
               filteredBuses: [],
               searchController: _searchController,
@@ -2128,6 +2231,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
     print("DEBUG: Selected bus: $selectedBus");
     print("DEBUG: Selected bus stop: ${selectedBusStop.address}");
 
+    // Show loading immediately while attempting connection
+    _showLoadingDialog();
+
     // Reset bus tracking state for new session
     _previousBusLocation = null;
     _currentBusBearing = 0.0;
@@ -2152,6 +2258,44 @@ class TrackBusState extends ConsumerState<TrackBus> {
       'latitude': location?.latitude,
       'longitude': location?.longitude,
     }));
+
+    // Listen for stream errors immediately so we can show a modal on failure
+    _busStreamSubscription?.close();
+    _busStreamSubscription = ref.listenManual<AsyncValue<BusLocationData>>(
+      busTrackingStreamProvider({
+        'busNumber': 'C5',
+        'direction': direction,
+        'busStopIndex': busStopIndex,
+        'latitude': location?.latitude,
+        'longitude': location?.longitude,
+      }),
+      (previous, next) {
+        if (next.hasError) {
+          final error = next.error;
+          print('[ERROR] Bus tracking stream error: $error');
+          if (!_isStreamActive) return;
+
+          String errorMessage = 'Unable to connect to bus tracking service';
+          if (error.toString().contains('timeout')) {
+            errorMessage = 'Connection timeout. The server may be offline. Please try again later.';
+          } else if (error.toString().contains('internet') || error.toString().contains('Connection refused')) {
+            errorMessage = 'No internet connection. Please check your connection and try again.';
+          }
+
+          // Ensure loader is visible, then show dialog after a brief delay
+          _showLoadingDialog();
+          Future.delayed(const Duration(milliseconds: 400), () {
+            if (!mounted) return;
+            _hideLoadingDialog();
+            _showNoServiceDialog(errorMessage);
+            setState(() {
+              _isStreamActive = false;
+            });
+          });
+          return;
+        }
+      },
+    );
     await _loadAndDrawRoutePolyline(selectedBus, direction);
     print(
         "DEBUG: Bus tracking initialized - waiting for real bus location data");
@@ -2404,6 +2548,12 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
   void _stopTracking({bool changeScreenState = true}) {
     print("DEBUG: Stopping tracking manually");
+
+    // Close stream listener
+    _busStreamSubscription?.close();
+    _busStreamSubscription = null;
+
+    // Close stream listener
 
     // Clear the rotated icons cache
     _rotatedBusIcons.clear();

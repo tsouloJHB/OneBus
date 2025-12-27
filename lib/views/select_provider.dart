@@ -50,7 +50,7 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
     });
 
     try {
-      // Fetch companies from backend endpoint `/api/bus-companies`
+      // Fetch companies from backend endpoint `/api/bus-companies/active`
       final serverProviders = await BusRouteService.getBusCompanies();
       if (!mounted) return;
       if (serverProviders.isNotEmpty) {
@@ -60,15 +60,42 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
         });
         return;
       }
+      // If server returned empty list, try fallback
+      print('[WARN] Server returned no bus companies, using local fallback');
     } catch (e) {
-      // ignore and fall back to local providers
+      print('[ERROR] Failed to fetch bus companies: $e');
+      // Error occurred, show fallback with notification
     }
+    
     // Fallback to local providers
     if (!mounted) return;
     setState(() {
       _providers = _fallbackProviders;
       _loading = false;
     });
+    
+    // Show notification that using offline data
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.warning, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'No internet connection. Using offline bus company data.',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.orange.shade700,
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
@@ -107,10 +134,11 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
                         itemCount: _providers.length,
                         itemBuilder: (context, index) {
                           final provider = _providers[index];
-                          final imageHeight =
-                              double.tryParse(provider['height'] ?? '') ?? 80.0;
-                          final imageWidth =
-                              double.tryParse(provider['width'] ?? '') ?? 80.0;
+                            // Keep aspect ratio while fitting inside the row; cap by container height.
+                            final imageHeight =
+                              double.tryParse(provider['height'] ?? '') ?? 100.0;
+                            final imageWidth =
+                              double.tryParse(provider['width'] ?? '') ?? 180.0;
 
                           return Padding(
                             padding:
@@ -142,33 +170,29 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    // If server supplied an image URL, use NetworkImage; otherwise fall back to asset
                                     (provider['image'] != null &&
-                                            provider['image']!
-                                                .startsWith('http'))
-                                        ? Image.network(
-                                            provider['image']!,
+                                            provider['image']!.startsWith('http'))
+                                        ? SizedBox(
                                             height: imageHeight,
                                             width: imageWidth,
-                                            fit: BoxFit.cover,
+                                            child: Image.network(
+                                              provider['image']!,
+                                              fit: BoxFit.contain,
+                                            ),
                                           )
-                                        : Image.asset(
-                                            provider['image'] ??
-                                                'assets/images/driverprovider.png',
-                                            height: imageHeight,
-                                            width: imageWidth,
-                                            fit: BoxFit.cover,
+                                        : Flexible(
+                                            child: Center(
+                                              child: Text(
+                                                provider['name'] ?? '',
+                                                style: const TextStyle(
+                                                  fontSize: 28,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
                                           ),
-                                    const SizedBox(width: 20),
-                                    Expanded(
-                                      child: Text(
-                                        provider['name'] ?? '',
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
+                                    const SizedBox(width: 20),       
                                   ],
                                 ),
                               ),

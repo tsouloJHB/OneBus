@@ -86,9 +86,11 @@ class BottomTrackingSheet extends ConsumerWidget {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                         // Header with bus info and actions
                         Container(
                           padding: const EdgeInsets.all(16),
@@ -615,7 +617,8 @@ class BottomTrackingSheet extends ConsumerWidget {
                             ],
                           ),
                         ],
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

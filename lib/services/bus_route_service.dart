@@ -49,12 +49,12 @@ class BusRouteService {
     }
   }
 
-  /// Fetch bus companies from backend endpoint `/api/bus-companies`.
+  /// Fetch only active bus companies from backend endpoint `/api/bus-companies/active`.
   /// Returns a list of maps with keys: `id`, `name`, `image`, `height`, `width`.
-  /// Uses a local placeholder image for now; backend will be updated later to include images.
+  /// Uses backend image URL when provided; falls back to a local placeholder.
   static Future<List<Map<String, String>>> getBusCompanies() async {
     try {
-      final url = '$baseUrl/api/bus-companies';
+      final url = '$baseUrl/api/bus-companies/active';
       print('[DEBUG] Fetching bus companies from: $url');
       final response = await http
           .get(Uri.parse(url), headers: {'accept': 'application/json'})
@@ -63,13 +63,21 @@ class BusRouteService {
       if (response.statusCode == 200) {
         final List<dynamic> jsonData = json.decode(response.body);
         final companies = jsonData.map<Map<String, String>>((item) {
+          // Backend returns imageUrl as relative path; prepend base URL for full HTTP URL
+          var imageUrl = (item['imageUrl'] ?? (item['image'] ?? '')).toString();
+          final fallbackImage = 'assets/images/driverprovider.png';
+          
+          // If imageUrl is relative (starts with /), prepend the base URL
+          if (imageUrl.isNotEmpty && !imageUrl.startsWith('http')) {
+            imageUrl = '$baseUrl$imageUrl';
+          }
+          
           return {
             'id': (item['id'] ?? '').toString(),
             'name': (item['name'] ?? '').toString(),
-            // placeholder asset for now; backend will supply `image` in the future
-            'image': 'assets/images/driverprovider.png',
-            'height': '80',
-            'width': '150',
+            'image': imageUrl.isNotEmpty ? imageUrl : fallbackImage,
+            'height': (item['height'] ?? '80').toString(),
+            'width': (item['width'] ?? '150').toString(),
           };
         }).where((c) => c['name']!.isNotEmpty).toList();
 

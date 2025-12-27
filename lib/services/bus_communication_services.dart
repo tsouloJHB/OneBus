@@ -16,32 +16,6 @@ import '../models/bus_position.model.dart';
 import '../models/bus_location_data.dart';
 
 class BusCommunicationServices {
-  // Keep track of simulated bus positions
-  static final Map<String, LatLng> _simulatedBusPositions = {};
-  static const double _baseLatitude = -26.18161422751231;
-  static const double _baseLongitude = 27.979878347512333;
-
-  static LatLng _getSimulatedPosition(String busNumber) {
-    if (!_simulatedBusPositions.containsKey(busNumber)) {
-      // Initialize with base position if not exists
-      _simulatedBusPositions[busNumber] = LatLng(_baseLatitude, _baseLongitude);
-    }
-    return _simulatedBusPositions[busNumber]!;
-  }
-
-  static void _updateSimulatedPosition(String busNumber) {
-    final currentPos = _getSimulatedPosition(busNumber);
-    // Simulate realistic movement along a route (small increments)
-    final random = DateTime.now().millisecondsSinceEpoch;
-    final latIncrement = (random % 20 - 10) / 100000.0; // -0.0001 to +0.0001 degrees
-    final lngIncrement = (random % 20 - 10) / 100000.0; // Small realistic movements
-    
-    final newPos = LatLng(
-      (currentPos.latitude + latIncrement).clamp(-26.3, -26.1), // Keep in Johannesburg area
-      (currentPos.longitude + lngIncrement).clamp(27.8, 28.2),  // Keep in Johannesburg area
-    );
-    _simulatedBusPositions[busNumber] = newPos;
-  }
 
   static Future<void> sendBusInfo(BusInfo busInfo) async {
     //   try {
@@ -278,9 +252,12 @@ class BusCommunicationServices {
                 '[ERROR] streamBusLocationLive: WebSocket exception details: ${error.message}');
           }
           print(
-              '[INFO] streamBusLocationLive: Falling back to simulated data due to WebSocket error');
-          // Fallback to simulated data instead of throwing error
-          _startSimulatedStream(controller, busNumber, busCompany, direction);
+              '[ERROR] streamBusLocationLive: Unable to connect to server');
+          // Close stream and report error instead of fallback
+          if (!controller.isClosed) {
+            controller.addError('Unable to connect to server. Please check your internet connection and try again.');
+            controller.close();
+          }
         },
         onStompError: (dynamic error) {
           print('[ERROR] streamBusLocationLive: STOMP error: $error');
@@ -294,12 +271,13 @@ class BusCommunicationServices {
     controller.onListen = () {
       print('[DEBUG] streamBusLocationLive: Activating STOMP client...');
 
-      // Set a timeout to fallback to simulation if WebSocket doesn't connect
+      // Set a timeout to report error if WebSocket doesn't connect
       connectionTimeout = Timer(const Duration(seconds: 10), () {
         print(
-            '[WARN] streamBusLocationLive: WebSocket connection timeout, falling back to simulation');
+            '[ERROR] streamBusLocationLive: WebSocket connection timeout');
         if (!controller.isClosed) {
-          _startSimulatedStream(controller, busNumber, busCompany, direction);
+          controller.addError('Connection timeout. The server may be offline. Please try again later.');
+          controller.close();
         }
       });
 
@@ -310,109 +288,22 @@ class BusCommunicationServices {
       print('[DEBUG] streamBusLocationLive: Deactivating STOMP client...');
       connectionTimeout?.cancel();
 
-      // Send unsubscribe request to backend
-      if (stompClient != null) {
-        stompClient?.send(
-          destination: '/app/unsubscribe',
-          body: json.encode({'busNumber': busNumber, 'direction': direction}),
-        );
+      // Send unsubscribe request to backend only if connected
+      if (stompClient != null && stompClient!.connected) {
+        try {
+          stompClient?.send(
+            destination: '/app/unsubscribe',
+            body: json.encode({'busNumber': busNumber, 'direction': direction}),
+          );
+        } catch (e) {
+          print('[WARN] streamBusLocationLive: Failed to send unsubscribe: $e');
+        }
       }
 
       stompClient?.deactivate();
     };
 
     return controller.stream;
-  }
-
-  // // Method to start real-time bus tracking using real path
-  // Stream<BusLocationData> streamBusLocationLive({
-  //   required String busNumber,
-  //   required String busCompany,
-  //   required String direction,
-  // }) async* {}
-
-  // Method to start real-time bus tracking using real path
-  Stream<BusLocationData> streamBusLocation({
-    required String busNumber,
-    required String busCompany,
-    required String direction,
-  }) async* {
-    final path = await loadBusPath(busNumber, direction);
-    if (path.isEmpty) {
-      print(
-          '[DEBUG] Path is empty for $busNumber $direction, falling back to random simulation');
-      yield* _simulateRandomPosition(busNumber, busCompany, direction);
-      return;
-    }
-    int idx = 0;
-    print(
-        '[DEBUG] Starting stream for $busNumber $direction, path length: ${path.length}');
-    while (true) {
-      final position = path[idx % path.length];
-      print(
-          '[DEBUG] Emitting position $idx: (${position.latitude}, ${position.longitude})');
-      yield BusLocationData(
-        busNumber: busNumber,
-        busCompany: busCompany,
-        direction: direction,
-        coordinates: position,
-        speed: 40.0, // You may enhance with dynamic speed if needed
-        isActive: true,
-        lastUpdated: DateTime.now(),
-      );
-      idx++;
-      await Future.delayed(const Duration(seconds: 5));
-    }
-  }
-
-  // Old simulation fallback
-  Stream<BusLocationData> _simulateRandomPosition(
-    String busNumber,
-    String busCompany,
-    String direction,
-  ) async* {
-    print('[DEBUG] Using fallback random simulation for $busNumber $direction');
-    while (true) {
-      await Future.delayed(const Duration(seconds: 5));
-      _updateSimulatedPosition(busNumber);
-      final position = _getSimulatedPosition(busNumber);
-      print(
-          '[DEBUG] Emitting random simulated position: (${position.latitude}, ${position.longitude})');
-      yield BusLocationData(
-        busNumber: busNumber,
-        busCompany: busCompany,
-        direction: direction,
-        coordinates: position,
-        speed: 40.0 + (DateTime.now().second % 10),
-        isActive: true,
-        lastUpdated: DateTime.now(),
-      );
-    }
-  }
-
-  // Helper method to start simulated stream in a StreamController
-  void _startSimulatedStream(
-    StreamController<BusLocationData> controller,
-    String busNumber,
-    String busCompany,
-    String direction,
-  ) async {
-    print('[INFO] Starting simulated stream for $busNumber $direction');
-    try {
-      await for (final data
-          in _simulateRandomPosition(busNumber, busCompany, direction)) {
-        if (!controller.isClosed) {
-          controller.add(data);
-        } else {
-          break;
-        }
-      }
-    } catch (e) {
-      print('[ERROR] Error in simulated stream: $e');
-      if (!controller.isClosed) {
-        controller.addError(e);
-      }
-    }
   }
 
   // Test method to check WebSocket connectivity
