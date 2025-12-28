@@ -890,15 +890,24 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
     print("DEBUG: Current state - Selected Bus: $selectedBus");
     print("DEBUG: Current state - Screen State: $currentScreenState");
+    print("DEBUG: Bus stop direction: '${busStop.direction}'");
+    print("DEBUG: Bus stop busStopIndices: ${busStop.busStopIndices}");
 
-    if (currentScreenState == ScreenState.locationSelection &&
+    // Allow bus stop selection in both locationSelection and tracking states
+    if ((currentScreenState == ScreenState.locationSelection || 
+         currentScreenState == ScreenState.tracking) &&
         selectedBus.isNotEmpty) {
       print("DEBUG: Conditions met for bus stop selection");
 
       // If the stop is bidirectional, prompt for direction
-      if (busStop.direction == 'bidirectional' &&
-          busStop.busStopIndices != null) {
-        _showDirectionSelectionDialog(busStop, selectedBus);
+      if (busStop.direction?.toLowerCase() == 'bidirectional') {
+        print("DEBUG: Bus stop is bidirectional, showing direction selection dialog");
+        if (busStop.busStopIndices != null) {
+          _showDirectionSelectionDialog(busStop, selectedBus);
+        } else {
+          // Fallback: show simple direction selection without indices
+          _showSimpleDirectionSelectionDialog(busStop, selectedBus);
+        }
         return;
       }
 
@@ -911,12 +920,102 @@ class TrackBusState extends ConsumerState<TrackBus> {
         CameraUpdate.newLatLng(busStop.coordinates),
       );
       print("DEBUG: Moved camera to selected bus stop");
+      
+      // If we're already in tracking mode, restart tracking with the new stop
+      if (currentScreenState == ScreenState.tracking) {
+        print("DEBUG: Already in tracking mode, restarting tracking with new stop");
+        startBusTracking(selectedBus, busStop);
+      }
     } else {
       print("DEBUG: Selection conditions not met");
       print(
-          "DEBUG: Screen state must be locationSelection (current: $currentScreenState)");
+          "DEBUG: Screen state must be locationSelection or tracking (current: $currentScreenState)");
       print("DEBUG: Selected bus must not be empty (current: '$selectedBus')");
     }
+  }
+
+  void _showSimpleDirectionSelectionDialog(BusStop busStop, String selectedBus) {
+    if (_isDialogVisible) return;
+    setState(() {
+      _isDialogVisible = true;
+    });
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Select Bus Direction'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('This stop serves buses in both directions. Please select your direction:'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    // Create a new BusStop with Northbound direction
+                    final updatedStop = BusStop(
+                      coordinates: busStop.coordinates,
+                      address: busStop.address,
+                      type: busStop.type,
+                      direction: 'Northbound',
+                      busStopIndex: busStop.busStopIndex,
+                      busStopIndices: busStop.busStopIndices,
+                    );
+                    ref.read(selectedBusStopProvider.notifier).state = updatedStop;
+                    _mapController.animateCamera(
+                      CameraUpdate.newLatLng(busStop.coordinates),
+                    );
+                    startBusTracking(selectedBus, updatedStop);
+                  });
+                },
+                child: const Text('Northbound'),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    // Create a new BusStop with Southbound direction
+                    final updatedStop = BusStop(
+                      coordinates: busStop.coordinates,
+                      address: busStop.address,
+                      type: busStop.type,
+                      direction: 'Southbound',
+                      busStopIndex: busStop.busStopIndex,
+                      busStopIndices: busStop.busStopIndices,
+                    );
+                    ref.read(selectedBusStopProvider.notifier).state = updatedStop;
+                    _mapController.animateCamera(
+                      CameraUpdate.newLatLng(busStop.coordinates),
+                    );
+                    startBusTracking(selectedBus, updatedStop);
+                  });
+                },
+                child: const Text('Southbound'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _isDialogVisible = false;
+                });
+              },
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      setState(() {
+        _isDialogVisible = false;
+      });
+    });
   }
 
   void _showDirectionSelectionDialog(BusStop busStop, String selectedBus) {
@@ -2225,6 +2324,64 @@ class TrackBusState extends ConsumerState<TrackBus> {
     });
   }
 
+  void _processBusLocationUpdate(BusLocationData busData, BusStop selectedBusStop) {
+    if (!mounted || !_isStreamActive) return;
+    
+    print('[DEBUG] Processing bus location update: ${busData.coordinates}');
+    print('[DEBUG] Bus speed: ${busData.speed} km/h');
+    print('[DEBUG] Bus direction: ${busData.direction}');
+    
+    // Update the current bus location in the provider
+    ref.read(currentBusLocationProvider.notifier).state = busData.coordinates;
+    
+    // Calculate bearing if we have a previous location
+    double bearing = 0.0;
+    if (_previousBusLocation != null) {
+      bearing = _calculateBearing(_previousBusLocation!, busData.coordinates);
+      _currentBusBearing = bearing;
+      print('[DEBUG] Calculated bearing: ${bearing.toStringAsFixed(2)}°');
+    }
+    
+    // Update previous location for next calculation
+    _previousBusLocation = busData.coordinates;
+    
+    // Update bus marker on map
+    setState(() {
+      // Remove old bus marker
+      markers.removeWhere((marker) => marker.markerId == busMarkerId);
+      
+      // Add new bus marker with rotation
+      _createRotatedBusIcon(bearing).then((rotatedIcon) {
+        if (mounted) {
+          setState(() {
+            markers.add(
+              Marker(
+                markerId: busMarkerId,
+                position: busData.coordinates,
+                icon: rotatedIcon,
+                rotation: bearing,
+                infoWindow: InfoWindow(
+                  title: 'Bus ${busData.busNumber}',
+                  snippet: 'Speed: ${busData.speed.toStringAsFixed(1)} km/h',
+                ),
+              ),
+            );
+          });
+        }
+      });
+    });
+    
+    // Update distance and ETA calculations
+    _updateDistanceAndETA(busData.coordinates, selectedBusStop);
+    
+    // Move camera to follow bus if enabled
+    if (_isFollowingBus) {
+      _mapController.animateCamera(
+        CameraUpdate.newLatLng(busData.coordinates),
+      );
+    }
+  }
+
   /// Start tracking a bus and draw the route polyline
   void startBusTracking(String selectedBus, BusStop selectedBusStop) async {
     print("DEBUG: Starting bus tracking");
@@ -2282,9 +2439,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
             errorMessage = 'No internet connection. Please check your connection and try again.';
           }
 
-          // Ensure loader is visible, then show dialog after a brief delay
-          _showLoadingDialog();
-          Future.delayed(const Duration(milliseconds: 400), () {
+          // Ensure loader is hidden and show dialog
+          Future.delayed(const Duration(milliseconds: 100), () {
             if (!mounted) return;
             _hideLoadingDialog();
             _showNoServiceDialog(errorMessage);
@@ -2294,8 +2450,54 @@ class TrackBusState extends ConsumerState<TrackBus> {
           });
           return;
         }
+        
+        // Hide loading dialog when we get data (success case)
+        if (next.hasValue) {
+          print('[DEBUG] Received bus location data, hiding loading dialog');
+          _hideLoadingDialog();
+          
+          // Check if this is just a connection status message (inactive with 0,0 coordinates)
+          final data = next.value!;
+          if (!data.isActive && data.coordinates.latitude == 0.0 && data.coordinates.longitude == 0.0) {
+            print('[DEBUG] Received connection status - WebSocket is ready');
+            // Don't process this as actual bus data, just acknowledge connection
+            return;
+          }
+          
+          // Process actual bus location data
+          print('[DEBUG] Processing bus location data: ${data.coordinates}');
+          _processBusLocationUpdate(data, selectedBusStop);
+        }
       },
     );
+    
+    // Hide loading dialog after a reasonable timeout even if no data arrives
+    // This prevents infinite loading when WebSocket connects but no bus data is available
+    Timer(const Duration(seconds: 3), () {
+      if (mounted && _isLoadingDialogVisible) {
+        print('[DEBUG] Timeout reached, hiding loading dialog');
+        _hideLoadingDialog();
+      }
+    });
+    
+    // Show "no bus data" message after a longer timeout if no real bus data arrives
+    Timer(const Duration(seconds: 10), () {
+      if (mounted && _isStreamActive) {
+        final currentBusLocation = ref.read(currentBusLocationProvider);
+        if (currentBusLocation == null) {
+          print('[DEBUG] No bus data received after 10 seconds, updating status');
+          ref.read(busTrackingProvider.notifier).updateBusTracking(
+            selectedBus: selectedBus,
+            selectedBusStop: selectedBusStop,
+            distance: 0.0,
+            estimatedArrivalTime: 0.0,
+            isOnTime: false,
+            arrivalStatus: 'No bus data available', // Update status to indicate no data
+          );
+          setState(() {}); // Force UI update
+        }
+      }
+    });
     await _loadAndDrawRoutePolyline(selectedBus, direction);
     print(
         "DEBUG: Bus tracking initialized - waiting for real bus location data");
@@ -2314,7 +2516,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
             distance: 0.0,
             estimatedArrivalTime: 0.0,
             isOnTime: true,
-            arrivalStatus: 'On Time', // Add initial arrival status
+            arrivalStatus: 'Waiting for bus data...', // More informative initial status
           );
     }
 

@@ -242,6 +242,25 @@ class BusCommunicationServices {
             destination: '/app/subscribe',
             body: json.encode(payload),
           );
+          
+          // Send a success indicator to the stream after connection is established
+          // This helps the UI know the connection is ready even if no bus data arrives immediately
+          Timer(const Duration(milliseconds: 500), () {
+            if (!controller.isClosed) {
+              // Send initial "connected" status
+              controller.add(
+                BusLocationData(
+                  busNumber: busNumber,
+                  busCompany: busCompany,
+                  direction: direction,
+                  coordinates: const LatLng(0.0, 0.0), // Placeholder coordinates
+                  speed: 0.0,
+                  isActive: false, // Mark as inactive to indicate this is just a connection status
+                  lastUpdated: DateTime.now(),
+                ),
+              );
+            }
+          });
         },
         onWebSocketError: (dynamic error) {
           print('[ERROR] streamBusLocationLive: WebSocket error: $error');
@@ -253,7 +272,8 @@ class BusCommunicationServices {
           }
           print(
               '[ERROR] streamBusLocationLive: Unable to connect to server');
-          // Close stream and report error instead of fallback
+          // Cancel timeout and close stream
+          connectionTimeout?.cancel();
           if (!controller.isClosed) {
             controller.addError('Unable to connect to server. Please check your internet connection and try again.');
             controller.close();
@@ -263,7 +283,11 @@ class BusCommunicationServices {
           print('[ERROR] streamBusLocationLive: STOMP error: $error');
           print(
               '[ERROR] streamBusLocationLive: STOMP error type: ${error.runtimeType}');
-          controller.addError(error);
+          connectionTimeout?.cancel();
+          if (!controller.isClosed) {
+            controller.addError('Unable to connect to server. Please check your internet connection and try again.');
+            controller.close();
+          }
         },
       ),
     );
@@ -272,13 +296,14 @@ class BusCommunicationServices {
       print('[DEBUG] streamBusLocationLive: Activating STOMP client...');
 
       // Set a timeout to report error if WebSocket doesn't connect
-      connectionTimeout = Timer(const Duration(seconds: 10), () {
+      connectionTimeout = Timer(const Duration(seconds: 5), () {
         print(
             '[ERROR] streamBusLocationLive: WebSocket connection timeout');
         if (!controller.isClosed) {
           controller.addError('Connection timeout. The server may be offline. Please try again later.');
           controller.close();
         }
+        stompClient?.deactivate();
       });
 
       stompClient?.activate();
