@@ -2532,13 +2532,19 @@ class TrackBusState extends ConsumerState<TrackBus> {
     setState(() {});
   }
 
-  /// Load and draw the route polyline for the given bus and direction
-  /// Uses FullRoute from backend API and draws from user location to bus via route
+  /// Load and draw the route polyline from bus position to selected bus stop only
+  /// Ensures polyline does not extend beyond the user's selected stop
   Future<void> _loadAndDrawRoutePolyline(String bus, String direction) async {
-    print('[DEBUG] Loading full route for bus: $bus, direction: $direction');
+    print('[DEBUG] Loading route polyline for bus: $bus, direction: $direction');
+    
+    final selectedBusStop = ref.read(selectedBusStopProvider);
+    if (selectedBusStop == null) {
+      print('[DEBUG] No selected bus stop, skipping polyline drawing');
+      return;
+    }
     
     try {
-      // Fetch full route from backend API (assuming companyId = 1 for now)
+      // Fetch full route from backend API
       final fullRoute = await FullRouteService.findFullRouteByBusAndDirection(
         busNumber: bus,
         direction: direction,
@@ -2549,53 +2555,44 @@ class TrackBusState extends ConsumerState<TrackBus> {
         print('[DEBUG] Found full route with ${fullRoute.coordinates.length} coordinates');
         
         final routeCoordinates = fullRoute.toLatLngList();
-        final userLocation = _currentLocation;
         final busLocation = ref.read(currentBusLocationProvider);
+        final stopLocation = selectedBusStop.coordinates;
 
         List<LatLng> polylinePoints = [];
 
-        // If we have user location, find nearest point on route and draw from user to that point
-        if (userLocation != null) {
-          print('[DEBUG] User location: $userLocation');
+        if (busLocation != null) {
+          print('[DEBUG] Drawing route from bus location: $busLocation to stop: $stopLocation');
           
-          // Find the nearest point on the route to the user
-          int nearestUserIndex = _findNearestPointIndex(userLocation, routeCoordinates);
-          print('[DEBUG] Nearest route point to user at index: $nearestUserIndex');
+          // Find the nearest point on the route to the bus
+          int nearestBusIndex = _findNearestPointIndex(busLocation, routeCoordinates);
+          print('[DEBUG] Nearest route point to bus at index: $nearestBusIndex');
           
-          // Add user location as starting point
-          polylinePoints.add(userLocation);
+          // Find the nearest point on the route to the selected bus stop
+          int nearestStopIndex = _findNearestPointIndex(stopLocation, routeCoordinates);
+          print('[DEBUG] Nearest route point to stop at index: $nearestStopIndex');
           
-          // If bus location exists, find segment between user and bus along the route
-          if (busLocation != null) {
-            print('[DEBUG] Bus location: $busLocation');
-            
-            // Find nearest point on route to bus
-            int nearestBusIndex = _findNearestPointIndex(busLocation, routeCoordinates);
-            print('[DEBUG] Nearest route point to bus at index: $nearestBusIndex');
-            
-            // Add route segment from user's nearest point to bus's nearest point
-            if (nearestUserIndex <= nearestBusIndex) {
-              // User is behind the bus - draw forward along route
-              polylinePoints.addAll(routeCoordinates.sublist(nearestUserIndex, nearestBusIndex + 1));
-            } else {
-              // User is ahead - draw backward along route
-              polylinePoints.addAll(routeCoordinates.sublist(nearestBusIndex, nearestUserIndex + 1).reversed);
-            }
-            
-            // Add bus location as endpoint
+          // Only draw route from bus to stop, ensuring we don't go beyond the stop
+          if (nearestBusIndex <= nearestStopIndex) {
+            // Bus is behind the stop - draw forward along route to the stop only
             polylinePoints.add(busLocation);
+            polylinePoints.addAll(routeCoordinates.sublist(nearestBusIndex, nearestStopIndex + 1));
+            // End at the selected stop - do not add stop location to avoid extending beyond
           } else {
-            // No bus location yet - just draw from user to nearest route point
-            polylinePoints.add(routeCoordinates[nearestUserIndex]);
+            // Bus is ahead of the stop - draw backward along route to the stop only
+            polylinePoints.add(busLocation);
+            polylinePoints.addAll(routeCoordinates.sublist(nearestStopIndex, nearestBusIndex + 1).reversed);
+            // End at the selected stop - do not add stop location to avoid extending beyond
           }
-        } else if (busLocation != null) {
-          // No user location but have bus - draw full route highlighting bus position
-          print('[DEBUG] No user location, drawing full route with bus at: $busLocation');
-          polylinePoints = routeCoordinates;
+          
+          print('[DEBUG] Polyline will show route from bus to selected stop only (${polylinePoints.length} points)');
         } else {
-          // Neither user nor bus location - draw full route
-          print('[DEBUG] No user or bus location, drawing full route');
-          polylinePoints = routeCoordinates;
+          // No bus location yet - draw from start of route to selected stop only
+          print('[DEBUG] No bus location yet, drawing from route start to selected stop');
+          int nearestStopIndex = _findNearestPointIndex(stopLocation, routeCoordinates);
+          
+          // Draw from beginning of route to the stop only
+          polylinePoints.addAll(routeCoordinates.sublist(0, nearestStopIndex + 1));
+          // End at the route point nearest to the stop - do not add stop location
         }
 
         setState(() {
@@ -2613,40 +2610,63 @@ class TrackBusState extends ConsumerState<TrackBus> {
           };
         });
         
-        print('[DEBUG] Polyline drawn with ${polylinePoints.length} points');
+        print('[DEBUG] Polyline drawn with ${polylinePoints.length} points (bus to stop only, no extension beyond)');
       } else {
         print('[DEBUG] No full route found, falling back to JSON path');
         // Fallback to old method if no full route in backend
-        final routePath = await BusCommunicationServices.loadBusPath(bus, direction);
-        if (routePath.isNotEmpty) {
-          setState(() {
-            _routePolylines = {
-              Polyline(
-                polylineId: const PolylineId('route_polyline'),
-                color: Colors.blue,
-                width: 5,
-                points: routePath,
-              ),
-            };
-          });
-        }
+        await _drawFallbackPolyline(bus, direction, selectedBusStop);
       }
     } catch (e) {
       print('[ERROR] Failed to load and draw route polyline: $e');
       // Fallback to old method on error
-      final routePath = await BusCommunicationServices.loadBusPath(bus, direction);
-      if (routePath.isNotEmpty) {
-        setState(() {
-          _routePolylines = {
-            Polyline(
-              polylineId: const PolylineId('route_polyline'),
-              color: Colors.blue,
-              width: 5,
-              points: routePath,
-            ),
-          };
-        });
+      await _drawFallbackPolyline(bus, direction, selectedBusStop);
+    }
+  }
+
+  /// Fallback method to draw polyline using JSON data
+  /// Ensures polyline does not extend beyond the user's selected stop
+  Future<void> _drawFallbackPolyline(String bus, String direction, BusStop selectedBusStop) async {
+    final routePath = await BusCommunicationServices.loadBusPath(bus, direction);
+    if (routePath.isNotEmpty) {
+      final busLocation = ref.read(currentBusLocationProvider);
+      final stopLocation = selectedBusStop.coordinates;
+      
+      List<LatLng> polylinePoints = [];
+      
+      if (busLocation != null) {
+        // Find relevant portion of route from bus to stop
+        int nearestBusIndex = _findNearestPointIndex(busLocation, routePath);
+        int nearestStopIndex = _findNearestPointIndex(stopLocation, routePath);
+        
+        // Only draw route from bus to stop, ensuring we don't go beyond the stop
+        if (nearestBusIndex <= nearestStopIndex) {
+          polylinePoints.add(busLocation);
+          polylinePoints.addAll(routePath.sublist(nearestBusIndex, nearestStopIndex + 1));
+          // End at the route point nearest to the stop - do not add stop location
+        } else {
+          polylinePoints.add(busLocation);
+          polylinePoints.addAll(routePath.sublist(nearestStopIndex, nearestBusIndex + 1).reversed);
+          // End at the route point nearest to the stop - do not add stop location
+        }
+      } else {
+        // No bus location - draw from start to stop only
+        int nearestStopIndex = _findNearestPointIndex(stopLocation, routePath);
+        polylinePoints.addAll(routePath.sublist(0, nearestStopIndex + 1));
+        // End at the route point nearest to the stop - do not add stop location
       }
+      
+      setState(() {
+        _routePolylines = {
+          Polyline(
+            polylineId: const PolylineId('route_polyline'),
+            color: Colors.blue,
+            width: 5,
+            points: polylinePoints,
+          ),
+        };
+      });
+      
+      print('[DEBUG] Fallback polyline drawn with ${polylinePoints.length} points (no extension beyond stop)');
     }
   }
 
