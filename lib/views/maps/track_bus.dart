@@ -1009,9 +1009,14 @@ class TrackBusState extends ConsumerState<TrackBus> {
         selectedBus.isNotEmpty) {
       print("DEBUG: Conditions met for bus stop selection");
 
+      // Show loading dialog immediately when user selects a stop
+      _showLoadingDialog();
+
       // If the stop is bidirectional, prompt for direction
       if (busStop.direction?.toLowerCase() == 'bidirectional') {
         print("DEBUG: Bus stop is bidirectional, showing direction selection dialog");
+        // Hide loading dialog before showing direction selection
+        _hideLoadingDialog();
         if (busStop.busStopIndices != null) {
           _showDirectionSelectionDialog(busStop, selectedBus);
         } else {
@@ -1034,6 +1039,12 @@ class TrackBusState extends ConsumerState<TrackBus> {
       // If we're already in tracking mode, restart tracking with the new stop
       if (currentScreenState == ScreenState.tracking) {
         print("DEBUG: Already in tracking mode, restarting tracking with new stop");
+        // Loading dialog is already shown, startBusTracking will handle it
+        startBusTracking(selectedBus, busStop);
+      } else {
+        // Start tracking for the first time
+        print("DEBUG: Starting tracking for the first time");
+        // Loading dialog is already shown, startBusTracking will handle it
         startBusTracking(selectedBus, busStop);
       }
     } else {
@@ -1065,21 +1076,26 @@ class TrackBusState extends ConsumerState<TrackBus> {
                 onPressed: () {
                   Navigator.pop(context);
                   setState(() {
-                    // Create a new BusStop with Northbound direction
-                    final updatedStop = BusStop(
-                      coordinates: busStop.coordinates,
-                      address: busStop.address,
-                      type: busStop.type,
-                      direction: 'Northbound',
-                      busStopIndex: busStop.busStopIndex,
-                      busStopIndices: busStop.busStopIndices,
-                    );
-                    ref.read(selectedBusStopProvider.notifier).state = updatedStop;
-                    _mapController.animateCamera(
-                      CameraUpdate.newLatLng(busStop.coordinates),
-                    );
-                    startBusTracking(selectedBus, updatedStop);
+                    _isDialogVisible = false;
                   });
+                  
+                  // Show loading dialog immediately after direction selection
+                  _showLoadingDialog();
+                  
+                  // Create a new BusStop with Northbound direction
+                  final updatedStop = BusStop(
+                    coordinates: busStop.coordinates,
+                    address: busStop.address,
+                    type: busStop.type,
+                    direction: 'Northbound',
+                    busStopIndex: busStop.busStopIndex,
+                    busStopIndices: busStop.busStopIndices,
+                  );
+                  ref.read(selectedBusStopProvider.notifier).state = updatedStop;
+                  _mapController.animateCamera(
+                    CameraUpdate.newLatLng(busStop.coordinates),
+                  );
+                  startBusTracking(selectedBus, updatedStop);
                 },
                 child: const Text('Northbound'),
               ),
@@ -1088,21 +1104,26 @@ class TrackBusState extends ConsumerState<TrackBus> {
                 onPressed: () {
                   Navigator.pop(context);
                   setState(() {
-                    // Create a new BusStop with Southbound direction
-                    final updatedStop = BusStop(
-                      coordinates: busStop.coordinates,
-                      address: busStop.address,
-                      type: busStop.type,
-                      direction: 'Southbound',
-                      busStopIndex: busStop.busStopIndex,
-                      busStopIndices: busStop.busStopIndices,
-                    );
-                    ref.read(selectedBusStopProvider.notifier).state = updatedStop;
-                    _mapController.animateCamera(
-                      CameraUpdate.newLatLng(busStop.coordinates),
-                    );
-                    startBusTracking(selectedBus, updatedStop);
+                    _isDialogVisible = false;
                   });
+                  
+                  // Show loading dialog immediately after direction selection
+                  _showLoadingDialog();
+                  
+                  // Create a new BusStop with Southbound direction
+                  final updatedStop = BusStop(
+                    coordinates: busStop.coordinates,
+                    address: busStop.address,
+                    type: busStop.type,
+                    direction: 'Southbound',
+                    busStopIndex: busStop.busStopIndex,
+                    busStopIndices: busStop.busStopIndices,
+                  );
+                  ref.read(selectedBusStopProvider.notifier).state = updatedStop;
+                  _mapController.animateCamera(
+                    CameraUpdate.newLatLng(busStop.coordinates),
+                  );
+                  startBusTracking(selectedBus, updatedStop);
                 },
                 child: const Text('Southbound'),
               ),
@@ -1149,22 +1170,26 @@ class TrackBusState extends ConsumerState<TrackBus> {
                 onPressed: () {
                   Navigator.pop(context);
                   setState(() {
-                    // Create a new BusStop with direction and busStopIndex set for Northbound
-                    final updatedStop = BusStop(
-                      coordinates: busStop.coordinates,
-                      address: busStop.address,
-                      type: busStop.type,
-                      direction: 'Northbound',
-                      busStopIndex: busStop.busStopIndices?['northbound'],
-                      busStopIndices: busStop.busStopIndices,
-                    );
-                    ref.read(selectedBusStopProvider.notifier).state =
-                        updatedStop;
-                    _mapController.animateCamera(
-                      CameraUpdate.newLatLng(busStop.coordinates),
-                    );
-                    startBusTracking(selectedBus, updatedStop);
+                    _isDialogVisible = false;
                   });
+                  
+                  // Show loading dialog immediately after direction selection
+                  _showLoadingDialog();
+                  
+                  // Create a new BusStop with direction and busStopIndex set for Northbound
+                  final updatedStop = BusStop(
+                    coordinates: busStop.coordinates,
+                    address: busStop.address,
+                    type: busStop.type,
+                    direction: 'Northbound',
+                    busStopIndex: busStop.busStopIndices?['northbound'],
+                    busStopIndices: busStop.busStopIndices,
+                  );
+                  ref.read(selectedBusStopProvider.notifier).state = updatedStop;
+                  _mapController.animateCamera(
+                    CameraUpdate.newLatLng(busStop.coordinates),
+                  );
+                  startBusTracking(selectedBus, updatedStop);
                 },
                 child: const Text('Northbound'),
               ),
@@ -1173,22 +1198,26 @@ class TrackBusState extends ConsumerState<TrackBus> {
                 onPressed: () {
                   Navigator.pop(context);
                   setState(() {
-                    // Create a new BusStop with direction and busStopIndex set for Southbound
-                    final updatedStop = BusStop(
-                      coordinates: busStop.coordinates,
-                      address: busStop.address,
-                      type: busStop.type,
-                      direction: 'Southbound',
-                      busStopIndex: busStop.busStopIndices?['southbound'],
-                      busStopIndices: busStop.busStopIndices,
-                    );
-                    ref.read(selectedBusStopProvider.notifier).state =
-                        updatedStop;
-                    _mapController.animateCamera(
-                      CameraUpdate.newLatLng(busStop.coordinates),
-                    );
-                    startBusTracking(selectedBus, updatedStop);
+                    _isDialogVisible = false;
                   });
+                  
+                  // Show loading dialog immediately after direction selection
+                  _showLoadingDialog();
+                  
+                  // Create a new BusStop with direction and busStopIndex set for Southbound
+                  final updatedStop = BusStop(
+                    coordinates: busStop.coordinates,
+                    address: busStop.address,
+                    type: busStop.type,
+                    direction: 'Southbound',
+                    busStopIndex: busStop.busStopIndices?['southbound'],
+                    busStopIndices: busStop.busStopIndices,
+                  );
+                  ref.read(selectedBusStopProvider.notifier).state = updatedStop;
+                  _mapController.animateCamera(
+                    CameraUpdate.newLatLng(busStop.coordinates),
+                  );
+                  startBusTracking(selectedBus, updatedStop);
                 },
                 child: const Text('Southbound'),
               ),
@@ -2504,8 +2533,10 @@ class TrackBusState extends ConsumerState<TrackBus> {
     print("DEBUG: Selected bus: $selectedBus");
     print("DEBUG: Selected bus stop: ${selectedBusStop.address}");
 
-    // Show loading immediately while attempting connection
-    _showLoadingDialog();
+    // Show loading dialog only if not already visible (since we now show it immediately on stop selection)
+    if (!_isLoadingDialogVisible) {
+      _showLoadingDialog();
+    }
 
     // Reset bus tracking state for new session
     _previousBusLocation = null;
