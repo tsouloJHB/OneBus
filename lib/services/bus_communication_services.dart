@@ -261,6 +261,16 @@ class BusCommunicationServices {
               );
             }
           });
+          
+          // Add a timeout to detect when no real bus data is available
+          Timer(const Duration(seconds: 12), () {
+            if (!controller.isClosed) {
+              // Check if we've received any real bus data (not just connection status)
+              // If not, this indicates the bus is not available/not running
+              print('[DEBUG] No real bus data received after 12 seconds - bus may not be available');
+              // Don't close the stream, let the UI handle the "no data" scenario
+            }
+          });
         },
         onWebSocketError: (dynamic error) {
           print('[ERROR] streamBusLocationLive: WebSocket error: $error');

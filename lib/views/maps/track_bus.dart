@@ -517,8 +517,27 @@ class TrackBusState extends ConsumerState<TrackBus> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(
-        child: CircularProgressIndicator(),
+      builder: (_) => AlertDialog(
+        content: Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 20),
+              const Text(
+                'Connecting to bus...',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Please wait while we locate your bus',
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       ),
     ).then((_) {
       _isLoadingDialogVisible = false;
@@ -530,6 +549,95 @@ class TrackBusState extends ConsumerState<TrackBus> {
       Navigator.of(context, rootNavigator: true).maybePop();
       _isLoadingDialogVisible = false;
     }
+  }
+
+  void _showBusNotAvailableDialog() {
+    if (!mounted || _isDialogVisible) return;
+    
+    setState(() {
+      _isDialogVisible = true;
+    });
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          icon: Icon(Icons.directions_bus_outlined, color: Colors.orange, size: 48),
+          title: const Text('Bus Not Available'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'The selected bus is currently not available or not in service.',
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info, color: Colors.blue.shade700, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'This could mean the bus is not currently running or the tracking system is offline.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _isDialogVisible = false;
+                });
+                // Go back to bus selection
+                ref.read(currentScreenStateProvider.notifier).state = ScreenState.searchBus;
+                _stopTracking(changeScreenState: false);
+              },
+              child: const Text('Select Different Bus'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _isDialogVisible = false;
+                });
+                // Try again by restarting tracking
+                final selectedBus = ref.read(selectedBusStateProvider);
+                final selectedBusStop = ref.read(selectedBusStopProvider);
+                if (selectedBus.isNotEmpty && selectedBusStop != null) {
+                  startBusTracking(selectedBus, selectedBusStop);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+              child: const Text('Try Again'),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      setState(() {
+        _isDialogVisible = false;
+      });
+    });
   }
 
   Future<String> _getAddressFromLatLng(LatLng latLng) async {
@@ -2441,10 +2549,17 @@ class TrackBusState extends ConsumerState<TrackBus> {
           if (!_isStreamActive) return;
 
           String errorMessage = 'Unable to connect to bus tracking service';
-          if (error.toString().contains('timeout')) {
-            errorMessage = 'Connection timeout. The server may be offline. Please try again later.';
-          } else if (error.toString().contains('internet') || error.toString().contains('Connection refused')) {
-            errorMessage = 'No internet connection. Please check your connection and try again.';
+          String errorTitle = 'Connection Error';
+          
+          if (error.toString().contains('timeout') || error.toString().contains('Connection timed out')) {
+            errorMessage = 'Connection timeout. The server may be offline or unreachable. Please check your internet connection and try again.';
+            errorTitle = 'Connection Timeout';
+          } else if (error.toString().contains('internet') || error.toString().contains('Connection refused') || error.toString().contains('SocketException')) {
+            errorMessage = 'Unable to reach the server. Please check your internet connection and try again.';
+            errorTitle = 'Network Error';
+          } else if (error.toString().contains('Unable to connect to server')) {
+            errorMessage = 'The bus tracking server is currently unavailable. Please try again later.';
+            errorTitle = 'Server Unavailable';
           }
 
           // Ensure loader is hidden and show dialog
@@ -2481,28 +2596,31 @@ class TrackBusState extends ConsumerState<TrackBus> {
     
     // Hide loading dialog after a reasonable timeout even if no data arrives
     // This prevents infinite loading when WebSocket connects but no bus data is available
-    Timer(const Duration(seconds: 3), () {
+    Timer(const Duration(seconds: 8), () {
       if (mounted && _isLoadingDialogVisible) {
-        print('[DEBUG] Timeout reached, hiding loading dialog');
+        print('[DEBUG] Initial timeout reached, hiding loading dialog');
         _hideLoadingDialog();
+        // Update status to show we're waiting for bus data
+        ref.read(busTrackingProvider.notifier).updateBusTracking(
+          selectedBus: selectedBus,
+          selectedBusStop: selectedBusStop,
+          distance: 0.0,
+          estimatedArrivalTime: 0.0,
+          isOnTime: true,
+          arrivalStatus: 'Searching for bus...', // Show searching status
+        );
+        setState(() {}); // Force UI update
       }
     });
     
     // Show "no bus data" message after a longer timeout if no real bus data arrives
-    Timer(const Duration(seconds: 10), () {
+    Timer(const Duration(seconds: 15), () {
       if (mounted && _isStreamActive) {
         final currentBusLocation = ref.read(currentBusLocationProvider);
         if (currentBusLocation == null) {
-          print('[DEBUG] No bus data received after 10 seconds, updating status');
-          ref.read(busTrackingProvider.notifier).updateBusTracking(
-            selectedBus: selectedBus,
-            selectedBusStop: selectedBusStop,
-            distance: 0.0,
-            estimatedArrivalTime: 0.0,
-            isOnTime: false,
-            arrivalStatus: 'No bus data available', // Update status to indicate no data
-          );
-          setState(() {}); // Force UI update
+          print('[DEBUG] No bus data received after 15 seconds, showing bus not available dialog');
+          _hideLoadingDialog(); // Ensure loading dialog is hidden
+          _showBusNotAvailableDialog();
         }
       }
     });
@@ -2524,7 +2642,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
             distance: 0.0,
             estimatedArrivalTime: 0.0,
             isOnTime: true,
-            arrivalStatus: 'Waiting for bus data...', // More informative initial status
+            arrivalStatus: 'Connecting to bus...', // More informative initial status
           );
     }
 
