@@ -243,31 +243,15 @@ class BusCommunicationServices {
             body: json.encode(payload),
           );
           
-          // Send a success indicator to the stream after connection is established
-          // This helps the UI know the connection is ready even if no bus data arrives immediately
-          Timer(const Duration(milliseconds: 500), () {
-            if (!controller.isClosed) {
-              // Send initial "connected" status
-              controller.add(
-                BusLocationData(
-                  busNumber: busNumber,
-                  busCompany: busCompany,
-                  direction: direction,
-                  coordinates: const LatLng(0.0, 0.0), // Placeholder coordinates
-                  speed: 0.0,
-                  isActive: false, // Mark as inactive to indicate this is just a connection status
-                  lastUpdated: DateTime.now(),
-                ),
-              );
-            }
-          });
+          // Don't send a fake connection status message - let real bus data arrive naturally
+          // The UI will handle the loading state with proper timeouts
           
           // Add a timeout to detect when no real bus data is available
-          Timer(const Duration(seconds: 12), () {
+          Timer(const Duration(seconds: 25), () {
             if (!controller.isClosed) {
               // Check if we've received any real bus data (not just connection status)
               // If not, this indicates the bus is not available/not running
-              print('[DEBUG] No real bus data received after 12 seconds - bus may not be available');
+              print('[DEBUG] No real bus data received after 25 seconds - bus may not be available');
               // Don't close the stream, let the UI handle the "no data" scenario
             }
           });
@@ -397,13 +381,14 @@ class BusCommunicationServices {
 
   // Test multiple WebSocket endpoints
   static Future<Map<String, bool>> testAllWebSocketEndpoints() async {
+    final baseUrl = AppConstants.webSocketUrl.replaceFirst('ws://', '').split(':')[0];
+    final port = AppConstants.webSocketUrl.split(':')[2].split('/')[0];
+    
     final endpoints = [
-      'ws://192.168.8.146:8080/ws/bus-updates',
-      'ws://192.168.8.146:8080/ws/bus-updates/websocket',
-      'ws://192.168.8.146:8080/ws',
-      'ws://192.168.8.146:8080/websocket',
-      'ws://192.168.8.146:8080/ws/bus-updates/websocket/websocket',
-      'ws://192.168.8.146:8080/ws/bus-updates/websocket/websocket/websocket',
+      'ws://$baseUrl:$port/ws/bus-updates',
+      'ws://$baseUrl:$port/ws/bus-updates/websocket',
+      'ws://$baseUrl:$port/ws',
+      'ws://$baseUrl:$port/websocket',
     ];
 
     final results = <String, bool>{};
@@ -463,8 +448,8 @@ class BusCommunicationServices {
   // Test method to check if server is reachable via HTTP
   static Future<bool> testServerReachability() async {
     try {
-      // Test the base server endpoint
-      final httpUrl = 'http://192.168.8.146:8080';
+      // Test the base server endpoint using the same URL as app constants
+      final httpUrl = AppConstants.apiBaseUrl.replaceFirst('/api', '');
       print('[TEST] Testing HTTP connection to: $httpUrl');
 
       final httpClient = HttpClient();
@@ -516,9 +501,11 @@ class BusCommunicationServices {
     try {
       print('[TEST] Testing SockJS handshake...');
 
+      final baseUrl = AppConstants.apiBaseUrl.replaceFirst('/api', '');
+      
       // First, try to get the SockJS info endpoint
       final httpClient = HttpClient();
-      final infoUrl = 'http://192.168.8.146:8080/ws/bus-updates/info';
+      final infoUrl = '$baseUrl/ws/bus-updates/info';
 
       try {
         final request = await httpClient.getUrl(Uri.parse(infoUrl));
@@ -535,7 +522,7 @@ class BusCommunicationServices {
       }
 
       // Try the websocket endpoint directly
-      final wsUrl = 'ws://192.168.8.146:8080/ws/bus-updates/websocket';
+      final wsUrl = AppConstants.webSocketUrl;
       try {
         final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
         await Future.delayed(const Duration(seconds: 1));

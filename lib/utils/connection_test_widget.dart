@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/bus_communication_services.dart';
+import '../constants/app_constants.dart';
 
 class ConnectionTestWidget extends StatefulWidget {
   const ConnectionTestWidget({Key? key}) : super(key: key);
@@ -9,128 +10,78 @@ class ConnectionTestWidget extends StatefulWidget {
 }
 
 class _ConnectionTestWidgetState extends State<ConnectionTestWidget> {
-  bool _isTesting = false;
-  String _testResult = '';
-  bool? _httpResult;
-  bool? _websocketResult;
-
-  Future<void> _runTests() async {
-    setState(() {
-      _isTesting = true;
-      _testResult = 'Running tests...\n';
-    });
-
-    try {
-      // Test HTTP connection first
-      _testResult += 'Testing HTTP connection...\n';
-      _httpResult = await BusCommunicationServices.testServerReachability();
-      _testResult +=
-          'HTTP test result: ${_httpResult == true ? 'SUCCESS' : 'FAILED'}\n\n';
-
-      // Test WebSocket connection
-      _testResult += 'Testing WebSocket connection...\n';
-      _websocketResult =
-          await BusCommunicationServices.testWebSocketConnection();
-      _testResult +=
-          'WebSocket test result: ${_websocketResult == true ? 'SUCCESS' : 'FAILED'}\n\n';
-
-      if (_httpResult == false) {
-        _testResult +=
-            '❌ Server is not reachable. Check if your server is running on 192.168.8.146:8080\n';
-      } else if (_websocketResult == false) {
-        _testResult +=
-            '❌ Server is reachable but WebSocket connection failed. Try different WebSocket URLs.\n';
-      } else {
-        _testResult += '✅ All tests passed! WebSocket connection is working.\n';
-      }
-    } catch (e) {
-      _testResult += '❌ Error during testing: $e\n';
-    }
-
-    setState(() {
-      _isTesting = false;
-    });
-  }
+  String _testResults = '';
+  bool _isLoading = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Connection Test'),
+        backgroundColor: Colors.blue,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Current Configuration:',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('WebSocket URL: ${AppConstants.webSocketUrl}'),
+                    Text('API Base URL: ${AppConstants.apiBaseUrl}'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _isTesting ? null : _runTests,
-              child: _isTesting
-                  ? const CircularProgressIndicator()
+              onPressed: _isLoading ? null : _runConnectionTests,
+              child: _isLoading
+                  ? const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 8),
+                        Text('Testing...'),
+                      ],
+                    )
                   : const Text('Run Connection Tests'),
             ),
-            const SizedBox(height: 20),
-            if (_httpResult != null || _websocketResult != null) ...[
-              Card(
+            const SizedBox(height: 16),
+            Expanded(
+              child: Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Test Results',
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Icon(
-                            _httpResult == true
-                                ? Icons.check_circle
-                                : Icons.error,
-                            color:
-                                _httpResult == true ? Colors.green : Colors.red,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                              'HTTP Connection: ${_httpResult == true ? 'SUCCESS' : 'FAILED'}'),
-                        ],
+                      const Text(
+                        'Test Results:',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(
-                            _websocketResult == true
-                                ? Icons.check_circle
-                                : Icons.error,
-                            color: _websocketResult == true
-                                ? Colors.green
-                                : Colors.red,
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Text(
+                            _testResults.isEmpty ? 'No tests run yet.' : _testResults,
+                            style: const TextStyle(fontFamily: 'monospace'),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                              'WebSocket Connection: ${_websocketResult == true ? 'SUCCESS' : 'FAILED'}'),
-                        ],
+                        ),
                       ),
                     ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16.0),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: SingleChildScrollView(
-                  child: Text(
-                    _testResult.isEmpty
-                        ? 'Click "Run Connection Tests" to start testing...'
-                        : _testResult,
-                    style: const TextStyle(fontFamily: 'monospace'),
                   ),
                 ),
               ),
@@ -139,5 +90,71 @@ class _ConnectionTestWidgetState extends State<ConnectionTestWidget> {
         ),
       ),
     );
+  }
+
+  Future<void> _runConnectionTests() async {
+    setState(() {
+      _isLoading = true;
+      _testResults = 'Starting connection tests...\n\n';
+    });
+
+    // Test 1: HTTP Server Reachability
+    _updateResults('1. Testing HTTP Server Reachability...');
+    try {
+      final isReachable = await BusCommunicationServices.testServerReachability();
+      _updateResults(isReachable ? '✅ HTTP Server is reachable' : '❌ HTTP Server is not reachable');
+    } catch (e) {
+      _updateResults('❌ HTTP Server test failed: $e');
+    }
+
+    _updateResults('');
+
+    // Test 2: WebSocket Connection
+    _updateResults('2. Testing WebSocket Connection...');
+    try {
+      final wsConnected = await BusCommunicationServices.testWebSocketConnection();
+      _updateResults(wsConnected ? '✅ WebSocket connection successful' : '❌ WebSocket connection failed');
+    } catch (e) {
+      _updateResults('❌ WebSocket test failed: $e');
+    }
+
+    _updateResults('');
+
+    // Test 3: SockJS Handshake
+    _updateResults('3. Testing SockJS Handshake...');
+    try {
+      final sockJSWorking = await BusCommunicationServices.testSockJSHandshake();
+      _updateResults(sockJSWorking ? '✅ SockJS handshake successful' : '❌ SockJS handshake failed');
+    } catch (e) {
+      _updateResults('❌ SockJS test failed: $e');
+    }
+
+    _updateResults('');
+
+    // Test 4: Multiple WebSocket Endpoints
+    _updateResults('4. Testing Multiple WebSocket Endpoints...');
+    try {
+      final endpointResults = await BusCommunicationServices.testAllWebSocketEndpoints();
+      for (final entry in endpointResults.entries) {
+        final status = entry.value ? '✅' : '❌';
+        _updateResults('$status ${entry.key}');
+      }
+    } catch (e) {
+      _updateResults('❌ Endpoint tests failed: $e');
+    }
+
+    _updateResults('\n=== Test Summary ===');
+    _updateResults('Configuration: ${AppConstants.webSocketUrl}');
+    _updateResults('Tests completed at: ${DateTime.now()}');
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  void _updateResults(String message) {
+    setState(() {
+      _testResults += '$message\n';
+    });
   }
 }

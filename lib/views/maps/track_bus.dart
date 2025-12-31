@@ -29,6 +29,7 @@ import 'package:onebus/views/maps/widegts/selection_location_sheet.dart';
 import 'package:onebus/models/bus_location_data.dart';
 
 final selectedBusStateProvider = StateProvider<String>((ref) => '');
+final selectedDirectionProvider = StateProvider<String?>((ref) => null);
 final currentBusLocationProvider = StateProvider<LatLng?>((ref) => null);
 final lastUpdateTimeProvider = StateProvider<DateTime?>((ref) => null);
 
@@ -85,6 +86,11 @@ class TrackBusState extends ConsumerState<TrackBus> {
   Map<double, BitmapDescriptor> _rotatedBusIcons = {};
   bool _isStreamActive = false; // Add flag to control stream activity
   bool _isLoadingDialogVisible = false;
+  Timer? _loadingMessageTimer;
+  int _loadingStep = 0;
+  
+  // Replace modal dialog with overlay approach
+  Widget? _loadingOverlay;
   ProviderSubscription<AsyncValue<BusLocationData>>? _busStreamSubscription;
 
   @override
@@ -101,6 +107,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Reset all state first
       ref.read(selectedBusStateProvider.notifier).state = '';
+      ref.read(selectedDirectionProvider.notifier).state = null;
       ref.read(selectedBusStopProvider.notifier).state = null;
       ref.read(currentTrackedBusProvider.notifier).state = null;
       ref.read(locationScreenStepProvider.notifier).state = 1;
@@ -513,42 +520,141 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
   void _showLoadingDialog() {
     if (!mounted || _isLoadingDialogVisible) return;
-    _isLoadingDialogVisible = true;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        content: Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 20),
-              const Text(
-                'Connecting to bus...',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Please wait while we locate your bus',
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                textAlign: TextAlign.center,
-              ),
-            ],
+    
+    // Don't show loading dialog if we're already tracking with bus data
+    final currentScreenState = ref.read(currentScreenStateProvider);
+    final currentBusLocation = ref.read(currentBusLocationProvider);
+    if (currentScreenState == ScreenState.tracking && 
+        _isStreamActive && 
+        currentBusLocation != null) {
+      print('[DEBUG] Skipping loading dialog - already tracking with bus data');
+      return;
+    }
+    
+    setState(() {
+      _isLoadingDialogVisible = true;
+      _loadingStep = 0;
+    });
+    
+    // Start a timer to update the loading message
+    _loadingMessageTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted || !_isLoadingDialogVisible) {
+        timer.cancel();
+        return;
+      }
+      
+      // Check if tracking became active - if so, cancel timer and hide dialog
+      final currentScreenState = ref.read(currentScreenStateProvider);
+      final currentBusLocation = ref.read(currentBusLocationProvider);
+      if (currentScreenState == ScreenState.tracking && 
+          _isStreamActive && 
+          currentBusLocation != null) {
+        print('[DEBUG] Timer detected tracking is active - hiding dialog');
+        timer.cancel();
+        _hideLoadingDialog();
+        return;
+      }
+      
+      setState(() {
+        _loadingStep++;
+      });
+    });
+  }
+  
+  Widget _buildLoadingOverlay() {
+    if (!_isLoadingDialogVisible) return const SizedBox.shrink();
+    
+    String title;
+    String message;
+    
+    switch (_loadingStep) {
+      case 0:
+        title = 'Connecting to bus...';
+        message = 'Establishing connection to the tracking system';
+        break;
+      case 1:
+        title = 'Searching for bus...';
+        message = 'Looking for your selected bus on the route';
+        break;
+      case 2:
+        title = 'Waiting for bus data...';
+        message = 'The bus may be between stops or temporarily offline';
+        break;
+      case 3:
+        title = 'Still searching...';
+        message = 'This is taking longer than usual. The bus may not be currently active.';
+        break;
+      default:
+        title = 'Almost there...';
+        message = 'Please wait a bit longer or try selecting a different bus';
+        break;
+    }
+    
+    return Container(
+      color: Colors.black54, // Semi-transparent background
+      child: Center(
+        child: Card(
+          margin: const EdgeInsets.all(32),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 20),
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                LinearProgressIndicator(
+                  value: (_loadingStep + 1) / 5,
+                  backgroundColor: Colors.grey[300],
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+                ),
+                if (_loadingStep >= 2) ...[
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      _hideLoadingDialog();
+                      // Go back to bus selection
+                      ref.read(currentScreenStateProvider.notifier).state = ScreenState.searchBus;
+                      _stopTracking(changeScreenState: false);
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
-    ).then((_) {
-      _isLoadingDialogVisible = false;
-    });
+    );
   }
 
   void _hideLoadingDialog() {
-    if (_isLoadingDialogVisible) {
-      Navigator.of(context, rootNavigator: true).maybePop();
+    if (!mounted) return;
+    
+    print('[DEBUG] _hideLoadingDialog called - clearing overlay');
+    
+    // Cancel timer
+    _loadingMessageTimer?.cancel();
+    _loadingMessageTimer = null;
+    
+    // Simply update state - no complex dialog dismissal needed
+    setState(() {
       _isLoadingDialogVisible = false;
-    }
+      _loadingStep = 0;
+    });
+    
+    print('[DEBUG] Loading overlay hidden');
   }
 
   void _showBusNotAvailableDialog() {
@@ -753,6 +859,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
                     // Start tracking the selected bus at this stop
                     final selectedBus = ref.read(selectedBusStateProvider);
+                   
                     startBusTracking(selectedBus, selectedStop);
                   },
                   child: const Text("Use This Stop"),
@@ -996,9 +1103,11 @@ class TrackBusState extends ConsumerState<TrackBus> {
     print("DEBUG: Bus stop address: ${busStop.address}");
 
     final selectedBus = ref.read(selectedBusStateProvider);
+    final selectedDirection = ref.read(selectedDirectionProvider);
     final currentScreenState = ref.read(currentScreenStateProvider);
 
     print("DEBUG: Current state - Selected Bus: $selectedBus");
+    print("DEBUG: Current state - Selected Direction: $selectedDirection");
     print("DEBUG: Current state - Screen State: $currentScreenState");
     print("DEBUG: Bus stop direction: '${busStop.direction}'");
     print("DEBUG: Bus stop busStopIndices: ${busStop.busStopIndices}");
@@ -1012,7 +1121,41 @@ class TrackBusState extends ConsumerState<TrackBus> {
       // Show loading dialog immediately when user selects a stop
       _showLoadingDialog();
 
-      // If the stop is bidirectional, prompt for direction
+      // Use the stored direction if available, otherwise check if stop is bidirectional
+      if (selectedDirection != null) {
+        print("DEBUG: Using stored direction: $selectedDirection");
+        // Create bus stop with the stored direction
+        final updatedStop = BusStop(
+          coordinates: busStop.coordinates,
+          address: busStop.address,
+          type: busStop.type,
+          direction: selectedDirection,
+          busStopIndex: busStop.busStopIndex ?? 
+              busStop.busStopIndices?[selectedDirection.toLowerCase()],
+          busStopIndices: busStop.busStopIndices,
+        );
+        
+        setState(() {
+          ref.read(selectedBusStopProvider.notifier).state = updatedStop;
+          print("DEBUG: Updated selectedBusStopProvider state with stored direction");
+        });
+
+        _mapController.animateCamera(
+          CameraUpdate.newLatLng(busStop.coordinates),
+        );
+        
+        // Start tracking with the stored direction
+        if (currentScreenState == ScreenState.tracking) {
+          print("DEBUG: Already in tracking mode, restarting tracking with stored direction");
+          startBusTracking(selectedBus, updatedStop);
+        } else {
+          print("DEBUG: Starting tracking for the first time with stored direction");
+          startBusTracking(selectedBus, updatedStop);
+        }
+        return;
+      }
+
+      // If no stored direction and the stop is bidirectional, prompt for direction
       if (busStop.direction?.toLowerCase() == 'bidirectional') {
         print("DEBUG: Bus stop is bidirectional, showing direction selection dialog");
         // Hide loading dialog before showing direction selection
@@ -1091,6 +1234,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
                     busStopIndex: busStop.busStopIndex,
                     busStopIndices: busStop.busStopIndices,
                   );
+                  
+                  // Store the selected direction for future use
+                  ref.read(selectedDirectionProvider.notifier).state = 'Northbound';
                   ref.read(selectedBusStopProvider.notifier).state = updatedStop;
                   _mapController.animateCamera(
                     CameraUpdate.newLatLng(busStop.coordinates),
@@ -1119,6 +1265,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
                     busStopIndex: busStop.busStopIndex,
                     busStopIndices: busStop.busStopIndices,
                   );
+                  
+                  // Store the selected direction for future use
+                  ref.read(selectedDirectionProvider.notifier).state = 'Southbound';
                   ref.read(selectedBusStopProvider.notifier).state = updatedStop;
                   _mapController.animateCamera(
                     CameraUpdate.newLatLng(busStop.coordinates),
@@ -1185,6 +1334,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
                     busStopIndex: busStop.busStopIndices?['northbound'],
                     busStopIndices: busStop.busStopIndices,
                   );
+                  
+                  // Store the selected direction for future use
+                  ref.read(selectedDirectionProvider.notifier).state = 'Northbound';
                   ref.read(selectedBusStopProvider.notifier).state = updatedStop;
                   _mapController.animateCamera(
                     CameraUpdate.newLatLng(busStop.coordinates),
@@ -1213,6 +1365,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
                     busStopIndex: busStop.busStopIndices?['southbound'],
                     busStopIndices: busStop.busStopIndices,
                   );
+                  
+                  // Store the selected direction for future use
+                  ref.read(selectedDirectionProvider.notifier).state = 'Southbound';
                   ref.read(selectedBusStopProvider.notifier).state = updatedStop;
                   _mapController.animateCamera(
                     CameraUpdate.newLatLng(busStop.coordinates),
@@ -1647,6 +1802,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
   void dispose() {
     _locationSubscription?.cancel();
     _busStreamSubscription?.close();
+    _loadingMessageTimer?.cancel();
     _searchController.dispose();
     _mapController.dispose();
     // Clear rotated bus icons cache to prevent memory leaks
@@ -1990,6 +2146,10 @@ class TrackBusState extends ConsumerState<TrackBus> {
       ref.read(selectedBusStateProvider.notifier).state = busNumber;
       print("DEBUG: Updated selectedBusStateProvider to: $busNumber");
 
+      // Store the selected direction
+      ref.read(selectedDirectionProvider.notifier).state = selectedDirection;
+      print("DEBUG: Updated selectedDirectionProvider to: $selectedDirection");
+
       // Change to location selection mode
       ref.read(currentScreenStateProvider.notifier).state =
           ScreenState.locationSelection;
@@ -2109,153 +2269,14 @@ class TrackBusState extends ConsumerState<TrackBus> {
     final locationScreen = ref.watch(locationScreenStateProvider);
     final currentBusLocation = ref.watch(currentBusLocationProvider);
 
-    // Restore stream listener
-    if (selectedBusStop != null && _currentLocation != null) {
-      ref.listen<AsyncValue<BusLocationData>>(
-        busTrackingStreamProvider({
-          'busNumber': 'C5',
-          'direction': selectedBusStop.direction ?? 'Northbound',
-          'busStopIndex': selectedBusStop.busStopIndex,
-          'latitude': _currentLocation!.latitude,
-          'longitude': _currentLocation!.longitude,
-        }),
-        (previous, next) {
-          // Handle errors
-          if (next.hasError) {
-            final error = next.error;
-            final stackTrace = next.stackTrace;
-            print('[ERROR] Bus tracking stream error: $error');
-            if (!_isStreamActive) return;
-            
-            String errorMessage = 'Unable to connect to bus tracking service';
-            if (error.toString().contains('timeout')) {
-              errorMessage = 'Connection timeout. The server may be offline. Please try again later.';
-            } else if (error.toString().contains('internet') || error.toString().contains('Connection refused')) {
-              errorMessage = 'No internet connection. Please check your connection and try again.';
-            }
-            
-            _showNoServiceDialog(errorMessage);
-            setState(() {
-              _isStreamActive = false;
-            });
-            return;
-          }
-          
-          // Handle loading
-          if (next.isLoading) {
-            print('[DEBUG] Bus tracking stream loading...');
-            return;
-          }
-          
-          // Handle data
-          next.whenData((busData) {
-            if (!_isStreamActive) return; // Only process if stream is active
-            _hideLoadingDialog();
-            print(
-                "DEBUG: Received bus location update: ${busData.coordinates}");
-
-            // Update the current bus location in the provider
-            ref.read(currentBusLocationProvider.notifier).state =
-                busData.coordinates;
-
-            // Calculate bearing if we have a previous location
-            double bearing = 0.0;
-            if (_previousBusLocation != null && busData.coordinates != null) {
-              bearing = _calculateBearing(
-                  _previousBusLocation!, busData.coordinates!);
-              _currentBusBearing = bearing;
-              print(
-                  "DEBUG: Calculated bearing:  {bearing.toStringAsFixed(2)}°");
-            }
-
-            // Update previous location for next calculation
-            _previousBusLocation = busData.coordinates;
-
-            // Update marker position and camera
-            setState(() {
-              markers.removeWhere((marker) => marker.markerId == busMarkerId);
-
-              // Create rotated bus marker
-              _createRotatedBusIcon(bearing).then((rotatedIcon) {
-                if (mounted && busData.coordinates != null) {
-                  setState(() {
-                    markers.add(
-                      Marker(
-                        markerId: busMarkerId,
-                        position: busData.coordinates!,
-                        icon: rotatedIcon,
-                        rotation: bearing, // Add rotation to marker
-                        infoWindow: const InfoWindow(
-                          title: 'Bus Location',
-                          snippet: 'Your bus is here',
-                        ),
-                      ),
-                    );
-                  });
-                }
-              }).catchError((error) {
-                print("DEBUG: Error creating rotated bus icon: $error");
-                // Fallback to default marker
-                if (mounted && busData.coordinates != null) {
-                  setState(() {
-                    markers.add(
-                      Marker(
-                        markerId: busMarkerId,
-                        position: busData.coordinates!,
-                        icon: busIcon != null
-                            ? BitmapDescriptor.fromBytes(busIcon!)
-                            : BitmapDescriptor.defaultMarker,
-                        infoWindow: const InfoWindow(
-                          title: 'Bus Location',
-                          snippet: 'Your bus is here',
-                        ),
-                      ),
-                    );
-                  });
-                }
-              });
-            });
-
-            // Always follow bus in tracking mode
-            if (currentScreenState == ScreenState.tracking &&
-                _mapController != null &&
-                busData.coordinates != null) {
-              print("DEBUG: Moving camera to follow bus at ${busData.coordinates}");
-              _mapController.animateCamera(
-                CameraUpdate.newLatLngZoom(
-                  busData.coordinates!,
-                  _getZoomLevel(currentScreenState),
-                ),
-              );
-            } else {
-              print("DEBUG: Not moving camera - screenState: $currentScreenState, controller: ${_mapController != null}, coords: ${busData.coordinates}");
-            }
-
-            // Only update distance/ETA if we're in tracking mode and have a selected bus stop
-            if (selectedBusStop != null &&
-                currentScreenState == ScreenState.tracking &&
-                busData.coordinates != null) {
-              final distance = _calculateDistance(
-                  busData.coordinates!, selectedBusStop.coordinates);
-
-              print(
-                  "DEBUG: Calculated distance from bus to stop: $distance km");
-
-              // Always update distance and ETA, regardless of distance size
-              final lastUpdate = ref.read(lastUpdateTimeProvider);
-              final now = DateTime.now();
-
-              // Update more frequently (every 1 second instead of 2)
-              if (lastUpdate == null ||
-                  now.difference(lastUpdate).inSeconds >= 1) {
-                _updateDistanceAndETA(busData.coordinates!, selectedBusStop);
-                ref.read(lastUpdateTimeProvider.notifier).state = now;
-                print("DEBUG: Updated distance and ETA values");
-              }
-            }
-          });
-        },
-      );
+    // Safety check: Hide loading dialog if tracking UI should be visible
+    if (currentScreenState == ScreenState.tracking &&
+        _isStreamActive &&
+        currentBusLocation != null &&
+        _isLoadingDialogVisible) {
+      // Immediately hide the dialog - don't wait for post frame callback
+      print('[DEBUG] IMMEDIATE: Hiding loading dialog because tracking UI should be visible');
+      _hideLoadingDialog();
     }
 
     return Scaffold(
@@ -2370,6 +2391,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
               onStopTracking: _stopTracking,
             ),
           ],
+          // Loading overlay - replaces modal dialogs
+          _buildLoadingOverlay(),
         ],
       ),
     );
@@ -2465,6 +2488,24 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
   void _processBusLocationUpdate(BusLocationData busData, BusStop selectedBusStop) {
     if (!mounted || !_isStreamActive) return;
+    
+    print('[DEBUG] _processBusLocationUpdate called - IMMEDIATELY clearing loading overlay');
+    
+    // IMMEDIATELY hide loading overlay when we get real bus data - no conditions
+    if (_isLoadingDialogVisible) {
+      print('[DEBUG] FORCE CLEARING loading overlay - bus data received');
+      // Cancel timer immediately
+      _loadingMessageTimer?.cancel();
+      _loadingMessageTimer = null;
+      
+      // Update state immediately - no modal dialogs to close
+      setState(() {
+        _isLoadingDialogVisible = false;
+        _loadingStep = 0;
+      });
+      
+      print('[DEBUG] Loading overlay cleared - only tracking UI should be visible');
+    }
     
     print('[DEBUG] Processing bus location update: ${busData.coordinates}');
     print('[DEBUG] Bus speed: ${busData.speed} km/h');
@@ -2565,6 +2606,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
     // Listen for stream errors immediately so we can show a modal on failure
     _busStreamSubscription?.close();
+    print('[DEBUG] Setting up stream listener for bus tracking');
     _busStreamSubscription = ref.listenManual<AsyncValue<BusLocationData>>(
       busTrackingStreamProvider({
         'busNumber': 'C5',
@@ -2574,6 +2616,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
         'longitude': location?.longitude,
       }),
       (previous, next) {
+        print('[DEBUG] Stream listener callback triggered - hasError: ${next.hasError}, hasValue: ${next.hasValue}, isLoading: ${next.isLoading}');
         if (next.hasError) {
           final error = next.error;
           print('[ERROR] Bus tracking stream error: $error');
@@ -2607,15 +2650,29 @@ class TrackBusState extends ConsumerState<TrackBus> {
         
         // Hide loading dialog when we get data (success case)
         if (next.hasValue) {
-          print('[DEBUG] Received bus location data, hiding loading dialog');
-          _hideLoadingDialog();
-          
+          print('[DEBUG] startBusTracking stream listener triggered with bus data');
           // Check if this is just a connection status message (inactive with 0,0 coordinates)
           final data = next.value!;
           if (!data.isActive && data.coordinates.latitude == 0.0 && data.coordinates.longitude == 0.0) {
             print('[DEBUG] Received connection status - WebSocket is ready');
-            // Don't process this as actual bus data, just acknowledge connection
+            // Don't hide loading dialog yet - wait for real bus data
             return;
+          }
+          
+          // IMMEDIATELY clear loading overlay when we get real bus data
+          print('[DEBUG] REAL BUS DATA RECEIVED - CLEARING LOADING OVERLAY');
+          if (_isLoadingDialogVisible) {
+            // Cancel timer immediately
+            _loadingMessageTimer?.cancel();
+            _loadingMessageTimer = null;
+            
+            // Update state immediately - no modal dialogs to close
+            setState(() {
+              _isLoadingDialogVisible = false;
+              _loadingStep = 0;
+            });
+            
+            print('[DEBUG] Stream listener: Loading overlay cleared');
           }
           
           // Process actual bus location data
@@ -2625,11 +2682,11 @@ class TrackBusState extends ConsumerState<TrackBus> {
       },
     );
     
-    // Hide loading dialog after a reasonable timeout even if no data arrives
-    // This prevents infinite loading when WebSocket connects but no bus data is available
-    Timer(const Duration(seconds: 8), () {
+    // Keep loading dialog visible longer to give bus data time to arrive
+    // Hide loading dialog after 20 seconds if no data arrives
+    Timer(const Duration(seconds: 20), () {
       if (mounted && _isLoadingDialogVisible) {
-        print('[DEBUG] Initial timeout reached, hiding loading dialog');
+        print('[DEBUG] Timeout reached after 20 seconds, hiding loading dialog');
         _hideLoadingDialog();
         // Update status to show we're waiting for bus data
         ref.read(busTrackingProvider.notifier).updateBusTracking(
@@ -2644,12 +2701,12 @@ class TrackBusState extends ConsumerState<TrackBus> {
       }
     });
     
-    // Show "no bus data" message after a longer timeout if no real bus data arrives
-    Timer(const Duration(seconds: 15), () {
+    // Show "no bus data" message after a much longer timeout if no real bus data arrives
+    Timer(const Duration(seconds: 30), () {
       if (mounted && _isStreamActive) {
         final currentBusLocation = ref.read(currentBusLocationProvider);
         if (currentBusLocation == null) {
-          print('[DEBUG] No bus data received after 15 seconds, showing bus not available dialog');
+          print('[DEBUG] No bus data received after 30 seconds, showing bus not available dialog');
           _hideLoadingDialog(); // Ensure loading dialog is hidden
           _showBusNotAvailableDialog();
         }
@@ -3064,6 +3121,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
     // Clear the current tracked bus
     ref.read(currentTrackedBusProvider.notifier).state = null;
+
+    // Clear the selected direction when stopping tracking
+    ref.read(selectedDirectionProvider.notifier).state = null;
 
     // Clear the bus tracking state
     ref.read(busTrackingProvider.notifier).clearAllTrackingState();
