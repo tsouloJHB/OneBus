@@ -8,6 +8,11 @@
     final double speed;
     final bool isActive;
     final DateTime lastUpdated;
+    
+    // Fallback support fields
+    final bool isFallback;
+    final String? fallbackDirection;
+    final String? originalDirection;
 
     BusLocationData({
       required this.busNumber,
@@ -17,6 +22,9 @@
       required this.speed,
       required this.isActive,
       required this.lastUpdated,
+      this.isFallback = false,
+      this.fallbackDirection,
+      this.originalDirection,
     });
 
     factory BusLocationData.fromJson(Map<String, dynamic> json) {
@@ -28,6 +36,9 @@
         speed: json['speed'].toDouble(),
         isActive: json['isActive'],
         lastUpdated: DateTime.parse(json['lastUpdated']),
+        isFallback: json['isFallback'] ?? false,
+        fallbackDirection: json['fallbackDirection'],
+        originalDirection: json['originalDirection'],
       );
     }
 
@@ -41,6 +52,9 @@
         'speed': speed,
         'isActive': isActive,
         'lastUpdated': lastUpdated.toIso8601String(),
+        'isFallback': isFallback,
+        'fallbackDirection': fallbackDirection,
+        'originalDirection': originalDirection,
       };
     }
   }

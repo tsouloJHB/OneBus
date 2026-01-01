@@ -156,17 +156,15 @@ class BusCommunicationServices {
     double? longitude,
   }) {
     final controller = StreamController<BusLocationData>();
-    final topic = "/topic/bus/${busNumber}_${direction}";
+    final primaryTopic = "/topic/bus/${busNumber}_${direction}";
+    
     StompClient? stompClient;
-
-    // Add a timeout to fallback to simulation if WebSocket fails
     Timer? connectionTimeout;
+    bool hasReceivedData = false;
 
-    print(
-        '[DEBUG] streamBusLocationLive: Initializing for bus $busNumber, direction $direction');
-    print(
-        '[DEBUG] streamBusLocationLive: WebSocket URL: ${AppConstants.webSocketUrl}');
-    print('[DEBUG] streamBusLocationLive: Subscribing to topic: $topic');
+    print('[DEBUG] streamBusLocationLive: Initializing for bus $busNumber, direction $direction');
+    print('[DEBUG] streamBusLocationLive: Primary topic: $primaryTopic');
+    print('[DEBUG] streamBusLocationLive: WebSocket URL: ${AppConstants.webSocketUrl}');
 
     stompClient = StompClient(
       config: StompConfig(
@@ -183,18 +181,27 @@ class BusCommunicationServices {
         },
         onConnect: (StompFrame frame) {
           print('[SUCCESS] streamBusLocationLive: Connected to WebSocket');
-          connectionTimeout
-              ?.cancel(); // Cancel timeout since connection succeeded
+          connectionTimeout?.cancel();
 
-          // Subscribe to the bus topic
+          // Subscribe to the primary direction topic
           stompClient?.subscribe(
-            destination: topic,
+            destination: primaryTopic,
             callback: (frame) {
               if (frame.body != null) {
                 try {
                   final data = json.decode(frame.body!);
-                  print(
-                      '[DEBUG] Received data for $busNumber $direction: $data');
+                  print('[DEBUG] Received data for $busNumber $direction: $data');
+                  hasReceivedData = true;
+
+                  // Check if this is a bus-offline event
+                  if (data['event'] == 'bus-offline') {
+                    print('[DEBUG] Bus went offline: ${data['busId']}');
+                    if (!controller.isClosed) {
+                      controller.addError('Bus is no longer available');
+                      controller.close();
+                    }
+                    return;
+                  }
 
                   // Map the backend data to our BusLocationData model
                   controller.add(
@@ -215,22 +222,24 @@ class BusCommunicationServices {
                           0.0,
                       isActive: true,
                       lastUpdated: DateTime.now(),
+                      // Check if this is fallback data (different direction than requested)
+                      isFallback: (data['tripDirection'] ?? direction).toLowerCase() != direction.toLowerCase(),
+                      fallbackDirection: (data['tripDirection'] ?? direction).toLowerCase() != direction.toLowerCase() 
+                          ? (data['tripDirection'] ?? direction) : null,
+                      originalDirection: (data['tripDirection'] ?? direction).toLowerCase() != direction.toLowerCase() 
+                          ? direction : null,
                     ),
                   );
                 } catch (e) {
                   print('[ERROR] Failed to parse bus data: $e');
                   print('[ERROR] Raw data: ${frame.body}');
                 }
-              } else {
-                print(
-                    '[WARN] streamBusLocationLive: Received empty frame body for topic $topic');
               }
             },
           );
 
-          // Send subscription request to backend
-          print(
-              '[DEBUG] streamBusLocationLive: Sending subscription message to /app/subscribe');
+          // Send subscription request to backend with smart bus selection
+          print('[DEBUG] streamBusLocationLive: Sending subscription message to /app/subscribe');
           final Map<String, dynamic> payload = {
             'busNumber': busNumber,
             'direction': direction,
@@ -238,35 +247,20 @@ class BusCommunicationServices {
           if (busStopIndex != null) payload['busStopIndex'] = busStopIndex;
           if (latitude != null) payload['latitude'] = latitude;
           if (longitude != null) payload['longitude'] = longitude;
+          
           stompClient?.send(
             destination: '/app/subscribe',
             body: json.encode(payload),
           );
-          
-          // Don't send a fake connection status message - let real bus data arrive naturally
-          // The UI will handle the loading state with proper timeouts
-          
-          // Add a timeout to detect when no real bus data is available
-          Timer(const Duration(seconds: 25), () {
-            if (!controller.isClosed) {
-              // Check if we've received any real bus data (not just connection status)
-              // If not, this indicates the bus is not available/not running
-              print('[DEBUG] No real bus data received after 25 seconds - bus may not be available');
-              // Don't close the stream, let the UI handle the "no data" scenario
-            }
-          });
         },
         onWebSocketError: (dynamic error) {
           print('[ERROR] streamBusLocationLive: WebSocket error: $error');
-          print(
-              '[ERROR] streamBusLocationLive: Error type: ${error.runtimeType}');
+          print('[ERROR] streamBusLocationLive: Error type: ${error.runtimeType}');
           if (error is WebSocketException) {
-            print(
-                '[ERROR] streamBusLocationLive: WebSocket exception details: ${error.message}');
+            print('[ERROR] streamBusLocationLive: WebSocket exception details: ${error.message}');
           }
-          print(
-              '[ERROR] streamBusLocationLive: Unable to connect to server');
-          // Cancel timeout and close stream
+          print('[ERROR] streamBusLocationLive: Unable to connect to server');
+          // Cancel timeouts and close stream
           connectionTimeout?.cancel();
           if (!controller.isClosed) {
             controller.addError('Unable to connect to server. Please check your internet connection and try again.');
@@ -275,8 +269,7 @@ class BusCommunicationServices {
         },
         onStompError: (dynamic error) {
           print('[ERROR] streamBusLocationLive: STOMP error: $error');
-          print(
-              '[ERROR] streamBusLocationLive: STOMP error type: ${error.runtimeType}');
+          print('[ERROR] streamBusLocationLive: STOMP error type: ${error.runtimeType}');
           connectionTimeout?.cancel();
           if (!controller.isClosed) {
             controller.addError('Unable to connect to server. Please check your internet connection and try again.');
@@ -290,9 +283,8 @@ class BusCommunicationServices {
       print('[DEBUG] streamBusLocationLive: Activating STOMP client...');
 
       // Set a timeout to report error if WebSocket doesn't connect
-      connectionTimeout = Timer(const Duration(seconds: 5), () {
-        print(
-            '[ERROR] streamBusLocationLive: WebSocket connection timeout');
+      connectionTimeout = Timer(const Duration(seconds: 10), () {
+        print('[ERROR] streamBusLocationLive: WebSocket connection timeout');
         if (!controller.isClosed) {
           controller.addError('Connection timeout. The server may be offline. Please try again later.');
           controller.close();
@@ -307,7 +299,7 @@ class BusCommunicationServices {
       print('[DEBUG] streamBusLocationLive: Deactivating STOMP client...');
       connectionTimeout?.cancel();
 
-      // Send unsubscribe request to backend only if connected
+      // Send unsubscribe request to backend
       if (stompClient != null && stompClient!.connected) {
         try {
           stompClient?.send(

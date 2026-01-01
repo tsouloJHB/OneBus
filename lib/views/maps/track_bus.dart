@@ -287,6 +287,18 @@ class TrackBusState extends ConsumerState<TrackBus> {
     print("DEBUG: _updateDistanceAndETA called");
     if (!mounted) return;
 
+    // Safety check: Don't process if stream is not active or tracking has been stopped
+    if (!_isStreamActive) {
+      print("DEBUG: Skipping distance/ETA update - stream not active");
+      return;
+    }
+
+    // Safety check: Ensure we have valid bus location and selected stop
+    if (busLocation == null || selectedBusStop == null) {
+      print("DEBUG: Skipping distance/ETA update - invalid bus location or stop");
+      return;
+    }
+
     print("DEBUG: Updating distance and ETA calculations");
     print("DEBUG: Bus Location: $busLocation");
     print("DEBUG: Bus Stop Location: ${selectedBusStop.coordinates}");
@@ -311,6 +323,12 @@ class TrackBusState extends ConsumerState<TrackBus> {
     final distanceInMeters = distance * 1000;
 
     if (distanceInMeters < 100 || estimatedTimeMinutes <= 0) {
+      // Double-check that we're still actively tracking before triggering arrival
+      if (!_isStreamActive) {
+        print("DEBUG: Stream no longer active - skipping arrival trigger");
+        return;
+      }
+      
       arrivalStatus = 'Bus has arrived';
       isOnTime = true;
       print("DEBUG: Bus has arrived at destination");
@@ -372,6 +390,10 @@ class TrackBusState extends ConsumerState<TrackBus> {
   void _stopTrackingOnArrival() {
     print("DEBUG: Stopping tracking on arrival");
 
+    // Close stream listener
+    _busStreamSubscription?.close();
+    _busStreamSubscription = null;
+
     // Clear the rotated icons cache
     _rotatedBusIcons.clear();
 
@@ -392,32 +414,45 @@ class TrackBusState extends ConsumerState<TrackBus> {
     // Invalidate the stream provider to stop the stream
     ref.invalidate(busTrackingStreamProvider);
 
-    // Don't change screen state - let user see arrival options
-    // ref.read(currentScreenStateProvider.notifier).state = ScreenState.searchBus;
-
-    print(
-        "DEBUG: Tracking stopped successfully - staying on tracking screen - stream disposed");
+    print("DEBUG: Tracking stopped successfully - socket closed - showing arrival modal");
   }
 
   void _showArrivalNotification() {
+    if (!mounted) return;
+
+    // Show arrival modal instead of snackbar
+    _showBusArrivalModal();
+  }
+
+  void _showFallbackNotification(String originalDirection, String fallbackDirection) {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 20),
+            Icon(Icons.info_outline, color: Colors.white, size: 20),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                'Bus has arrived at destination!',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'No $originalDirection buses available',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  Text(
+                    'Showing $fallbackDirection bus instead',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 5),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 6),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -431,6 +466,207 @@ class TrackBusState extends ConsumerState<TrackBus> {
         ),
       ),
     );
+  }
+
+  void _showBusArrivalModal() {
+    if (!mounted || _isDialogVisible) return;
+    
+    setState(() {
+      _isDialogVisible = true;
+    });
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.green.shade50,
+                  Colors.white,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Success icon with animation
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.3),
+                        spreadRadius: 4,
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.check_circle,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
+                // Title
+                Text(
+                  'Bus Has Arrived!',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                
+                // Message
+                Text(
+                  'Your bus has reached the destination. What would you like to do next?',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                
+                // Action buttons
+                Column(
+                  children: [
+                    // Go Home button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          setState(() {
+                            _isDialogVisible = false;
+                          });
+                          // Navigate to home screen
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (context) => const HomeScreen()),
+                            (route) => false,
+                          );
+                        },
+                        icon: const Icon(Icons.home, size: 20),
+                        label: const Text(
+                          'Go Home',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Track Another Bus button
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          setState(() {
+                            _isDialogVisible = false;
+                          });
+                          
+                          // COMPREHENSIVE STATE RESET
+                          print("DEBUG: Comprehensive state reset for new tracking session");
+                          
+                          // Reset screen state first
+                          ref.read(currentScreenStateProvider.notifier).state = ScreenState.searchBus;
+                          
+                          // Clear all bus-related providers
+                          ref.read(selectedBusStateProvider.notifier).state = '';
+                          ref.read(selectedDirectionProvider.notifier).state = null;
+                          ref.read(selectedBusStopProvider.notifier).state = null;
+                          ref.read(currentTrackedBusProvider.notifier).state = null;
+                          ref.read(currentBusLocationProvider.notifier).state = null;
+                          ref.read(lastUpdateTimeProvider.notifier).state = null;
+                          
+                          // Clear persistent tracking values that might show "Bus N/A"
+                          ref.read(persistentDistanceProvider.notifier).state = 0.0;
+                          ref.read(persistentETAProvider.notifier).state = 0.0;
+                          
+                          // Clear tracking state completely
+                          ref.read(busTrackingProvider.notifier).clearAllTrackingState();
+                          
+                          // Reset local tracking variables
+                          setState(() {
+                            _isStreamActive = false;
+                            _previousBusLocation = null;
+                            _currentBusBearing = 0.0;
+                            _isLoadingDialogVisible = false;
+                            _loadingStep = 0;
+                            
+                            // Clear map elements
+                            markers.removeWhere((marker) => marker.markerId.value != 'user_location');
+                            _routePolylines.clear();
+                          });
+                          
+                          // Cancel any active timers
+                          _loadingMessageTimer?.cancel();
+                          _loadingMessageTimer = null;
+                          
+                          // Close any active stream subscriptions
+                          _busStreamSubscription?.close();
+                          _busStreamSubscription = null;
+                          
+                          // Invalidate stream providers to ensure clean state
+                          ref.invalidate(busTrackingStreamProvider);
+                          
+                          print("DEBUG: State reset complete - ready for new bus selection");
+                        },
+                        icon: const Icon(Icons.directions_bus, size: 20),
+                        label: const Text(
+                          'Track Another Bus',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          side: BorderSide(color: Colors.green, width: 2),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ).then((_) {
+      setState(() {
+        _isDialogVisible = false;
+      });
+    });
   }
 
   void _showNoServiceDialog(String errorMessage) {
@@ -577,8 +813,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
         message = 'Looking for your selected bus on the route';
         break;
       case 2:
-        title = 'Waiting for bus data...';
-        message = 'The bus may be between stops or temporarily offline';
+        title = 'Trying alternative direction...';
+        message = 'No buses found in selected direction, checking opposite direction';
         break;
       case 3:
         title = 'Still searching...';
@@ -617,7 +853,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
                 LinearProgressIndicator(
                   value: (_loadingStep + 1) / 5,
                   backgroundColor: Colors.grey[300],
-                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    _loadingStep == 2 ? Colors.orange : Colors.blue
+                  ),
                 ),
                 if (_loadingStep >= 2) ...[
                   const SizedBox(height: 16),
@@ -934,9 +1172,12 @@ class TrackBusState extends ConsumerState<TrackBus> {
     }
   }
 
-  Future<void> _loadBusStopsAndMarkers() async {
+  Future<void> _loadBusStopsAndMarkers({String? filterDirection}) async {
     try {
       print("DEBUG: Starting to load bus stops and markers");
+      if (filterDirection != null) {
+        print("DEBUG: Filtering bus stops for direction: $filterDirection");
+      }
 
       // Get the selected bus and company
       final selectedBus = ref.read(selectedBusStateProvider);
@@ -957,39 +1198,60 @@ class TrackBusState extends ConsumerState<TrackBus> {
           if (busRouteResponse != null && busRouteResponse.routes.isNotEmpty) {
             print("DEBUG: API call successful! Received ${busRouteResponse.routes.length} routes");
             
-            // Get all stops from all routes
+            // Get all stops from all routes, filtering by direction if specified
             for (var route in busRouteResponse.routes) {
               if (route.active && route.stops.isNotEmpty) {
-                print("DEBUG: Processing route ${route.routeName} with ${route.stops.length} stops");
+                // Filter route by direction if specified
+                if (filterDirection != null && 
+                    route.direction != null && 
+                    !route.direction!.toLowerCase().contains(filterDirection.toLowerCase())) {
+                  print("DEBUG: Skipping route ${route.routeName} - direction ${route.direction} doesn't match filter $filterDirection");
+                  continue;
+                }
+                
+                print("DEBUG: Processing route ${route.routeName} with ${route.stops.length} stops for direction: ${route.direction}");
                 final routeStops =
                     BusRouteService.convertApiStopsToBusStops(route.stops);
                 
-                busStops.addAll(routeStops);
+                // Additional filtering at stop level if needed
+                if (filterDirection != null) {
+                  final filteredStops = routeStops.where((stop) {
+                    // Include stops that match the direction or are bidirectional
+                    return stop.direction == null || 
+                           stop.direction!.toLowerCase() == 'bidirectional' ||
+                           stop.direction!.toLowerCase().contains(filterDirection.toLowerCase());
+                  }).toList();
+                  
+                  print("DEBUG: Filtered ${routeStops.length} stops to ${filteredStops.length} for direction $filterDirection");
+                  busStops.addAll(filteredStops);
+                } else {
+                  busStops.addAll(routeStops);
+                }
               }
             }
 
             if (busStops.isNotEmpty) {
               print(
-                  "DEBUG: Successfully loaded ${busStops.length} bus stops from API");
+                  "DEBUG: Successfully loaded ${busStops.length} bus stops from API (filtered for direction: $filterDirection)");
             } else {
-              print("DEBUG: API returned no stops, falling back to JSON");
-              await _loadBusStopsFromJson();
+              print("DEBUG: API returned no stops after filtering, falling back to JSON");
+              await _loadBusStopsFromJson(filterDirection: filterDirection);
               return;
             }
           } else {
             print("DEBUG: API returned no routes, falling back to JSON");
-            await _loadBusStopsFromJson();
+            await _loadBusStopsFromJson(filterDirection: filterDirection);
             return;
           }
         } catch (e) {
           print("DEBUG: API call failed with error: $e");
           print("DEBUG: Falling back to local JSON file");
-          await _loadBusStopsFromJson();
+          await _loadBusStopsFromJson(filterDirection: filterDirection);
           return;
         }
       } else {
         print("DEBUG: No bus/company selected (bus: '$selectedBus', company: '$selectedCompany'), loading from JSON");
-        await _loadBusStopsFromJson();
+        await _loadBusStopsFromJson(filterDirection: filterDirection);
         return;
       }
 
@@ -1044,9 +1306,13 @@ class TrackBusState extends ConsumerState<TrackBus> {
   }
 
   /// Load bus stops from JSON file (fallback method)
-  Future<void> _loadBusStopsFromJson() async {
+  Future<void> _loadBusStopsFromJson({String? filterDirection}) async {
     try {
       print("DEBUG: Loading bus stops from JSON file");
+      if (filterDirection != null) {
+        print("DEBUG: Filtering JSON bus stops for direction: $filterDirection");
+      }
+      
       final busStopsCoordinates =
           await BusCommunicationServices.getBusStopsFromJson();
       List<BusStop> busStops = [];
@@ -1058,15 +1324,27 @@ class TrackBusState extends ConsumerState<TrackBus> {
         final latLng = LatLng(latitude, longitude);
         final address = await _getAddressFromLatLng(latLng);
         final type = busStop["type"] ?? "Bus stop";
+        final direction = busStop["direction"] ?? "bidirectional";
+
+        // Filter by direction if specified
+        if (filterDirection != null) {
+          // Include stops that match the direction or are bidirectional
+          if (direction.toLowerCase() != 'bidirectional' && 
+              !direction.toLowerCase().contains(filterDirection.toLowerCase())) {
+            print("DEBUG: Skipping JSON stop - direction '$direction' doesn't match filter '$filterDirection'");
+            continue;
+          }
+        }
 
         busStops.add(BusStop(
           coordinates: latLng,
           address: address,
           type: type,
+          direction: direction,
         ));
       }
 
-      print("DEBUG: Created ${busStops.length} bus stop objects from JSON");
+      print("DEBUG: Created ${busStops.length} bus stop objects from JSON (filtered for direction: $filterDirection)");
 
       // Create marker icon first
       await _createMarkerIcon();
@@ -1423,12 +1701,19 @@ class TrackBusState extends ConsumerState<TrackBus> {
       }
     }
 
+    // Get the selected direction to show in the title
+    final selectedDirection = ref.read(selectedDirectionProvider);
+    String titlePrefix = '';
+    if (selectedDirection != null) {
+      titlePrefix = '${selectedDirection.substring(0, 1).toUpperCase()}${selectedDirection.substring(1).toLowerCase()} - ';
+    }
+
     return Marker(
       markerId: MarkerId('stop_${busStop.coordinates.latitude}_${busStop.coordinates.longitude}'),
       position: busStop.coordinates,
       icon: markerIcon,
       infoWindow: InfoWindow(
-        title: '${isHighlighted ? '🚌 ' : ''}Stop $index',
+        title: '${isHighlighted ? '🚌 ' : ''}${titlePrefix}Stop $index',
         snippet: '${busStop.address} • $direction',
         onTap: () => _handleBusStopSelection(busStop),
       ),
@@ -2172,10 +2457,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
       print("DEBUG: Disabled user location tracking");
     });
 
-    // Reload bus stops for the selected bus - this will try API first, then fallback to JSON
-    // TODO: In the future, we could filter stops by selected direction
+    // Load bus stops filtered by the selected direction
     print("DEBUG: Fetching bus stops from server for bus: $busNumber, company: ${busController.getBusCompany()}, direction: $selectedDirection");
-    await _loadBusStopsAndMarkers();
+    await _loadBusStopsAndMarkers(filterDirection: selectedDirection);
 
     print("DEBUG: Bus selection complete - ready for bus stop selection");
   }
@@ -2487,7 +2771,10 @@ class TrackBusState extends ConsumerState<TrackBus> {
   }
 
   void _processBusLocationUpdate(BusLocationData busData, BusStop selectedBusStop) {
-    if (!mounted || !_isStreamActive) return;
+    if (!mounted || !_isStreamActive) {
+      print('[DEBUG] Skipping bus location update - not mounted or stream not active');
+      return;
+    }
     
     print('[DEBUG] _processBusLocationUpdate called - IMMEDIATELY clearing loading overlay');
     
@@ -2551,17 +2838,19 @@ class TrackBusState extends ConsumerState<TrackBus> {
       });
     });
     
-    // Update distance and ETA calculations
-    _updateDistanceAndETA(busData.coordinates, selectedBusStop);
+    // Update distance and ETA calculations only if still actively tracking
+    if (_isStreamActive) {
+      _updateDistanceAndETA(busData.coordinates, selectedBusStop);
+    }
     
     // Redraw polyline with updated bus position
     final currentBus = ref.read(selectedBusStateProvider);
-    if (currentBus.isNotEmpty) {
+    if (currentBus.isNotEmpty && _isStreamActive) {
       _loadAndDrawRoutePolyline(currentBus, busData.direction ?? 'Northbound');
     }
     
     // Move camera to follow bus if enabled
-    if (_isFollowingBus) {
+    if (_isFollowingBus && _isStreamActive) {
       _mapController.animateCamera(
         CameraUpdate.newLatLng(busData.coordinates),
       );
@@ -2574,6 +2863,14 @@ class TrackBusState extends ConsumerState<TrackBus> {
     print("DEBUG: Selected bus: $selectedBus");
     print("DEBUG: Selected bus stop: ${selectedBusStop.address}");
 
+    // SAFETY: Ensure we start with completely clean state
+    print("DEBUG: Ensuring clean state before starting new tracking session");
+    
+    // Clear any residual tracking state that might cause "Bus N/A" display
+    ref.read(persistentDistanceProvider.notifier).state = 0.0;
+    ref.read(persistentETAProvider.notifier).state = 0.0;
+    ref.read(currentBusLocationProvider.notifier).state = null;
+    
     // Show loading dialog only if not already visible (since we now show it immediately on stop selection)
     if (!_isLoadingDialogVisible) {
       _showLoadingDialog();
@@ -2651,12 +2948,16 @@ class TrackBusState extends ConsumerState<TrackBus> {
         // Hide loading dialog when we get data (success case)
         if (next.hasValue) {
           print('[DEBUG] startBusTracking stream listener triggered with bus data');
-          // Check if this is just a connection status message (inactive with 0,0 coordinates)
           final data = next.value!;
-          if (!data.isActive && data.coordinates.latitude == 0.0 && data.coordinates.longitude == 0.0) {
-            print('[DEBUG] Received connection status - WebSocket is ready');
-            // Don't hide loading dialog yet - wait for real bus data
-            return;
+          
+          // Handle fallback bus data (when server returns opposite direction)
+          if (data.isFallback && data.originalDirection != null && data.fallbackDirection != null) {
+            print('[DEBUG] Received fallback bus data - showing user notification');
+            
+            // Show fallback notification to user
+            if (mounted) {
+              _showFallbackNotification(data.originalDirection!, data.fallbackDirection!);
+            }
           }
           
           // IMMEDIATELY clear loading overlay when we get real bus data
