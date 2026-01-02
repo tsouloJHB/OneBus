@@ -239,7 +239,7 @@ class BusCommunicationServices {
           print('[SUCCESS] streamBusLocationLive: Connected to WebSocket');
           connectionTimeout?.cancel();
 
-          // Subscribe to the primary direction topic (fallback)
+          // Subscribe to the primary direction topic
           print('[DEBUG] Subscribing to primary topic: $primaryTopic');
           stompClient?.subscribe(
             destination: primaryTopic,
@@ -343,6 +343,8 @@ class BusCommunicationServices {
 
     controller.onCancel = () {
       print('[DEBUG] ===== STREAM CANCELLED =====');
+      print('[DEBUG] Stream cancelled at: ${DateTime.now()}');
+      print('[DEBUG] Stack trace: ${StackTrace.current}');
       connectionTimeout?.cancel();
       
       // Clear references but don't force immediate closure

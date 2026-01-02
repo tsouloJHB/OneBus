@@ -2950,8 +2950,13 @@ class TrackBusState extends ConsumerState<TrackBus> {
     print("DEBUG: - fallback longitude: $fallbackLongitude");
 
     // Listen for stream errors immediately so we can show a modal on failure
+    // Listen for stream data using watch instead of listenManual
+    print('[DEBUG] Setting up stream watcher for bus tracking');
+    
     _busStreamSubscription?.close();
     print('[DEBUG] Setting up stream listener for bus tracking');
+    
+    // Use listenManual with fireImmediately to ensure proper stream activation
     _busStreamSubscription = ref.listenManual<AsyncValue<BusLocationData>>(
       busTrackingStreamProvider({
         'busNumber': 'C5',
@@ -3035,6 +3040,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
           _processBusLocationUpdate(data, selectedBusStop);
         }
       },
+      fireImmediately: true, // CRITICAL: This triggers the stream to start immediately
     );
     
     // Keep loading dialog visible longer to give bus data time to arrive
