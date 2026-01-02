@@ -95,6 +95,11 @@ class TrackBusState extends ConsumerState<TrackBus> {
   
   // Track if we've already shown the fallback notification for this session
   bool _fallbackNotificationShown = false;
+  
+  // Track fallback bus state to ignore arrival detection during wrong direction travel
+  bool _isFallbackBus = false;
+  String? _fallbackOriginalDirection;
+  String? _fallbackActualDirection;
 
   @override
   void initState() {
@@ -325,7 +330,28 @@ class TrackBusState extends ConsumerState<TrackBus> {
     // Convert distance to meters for more precise arrival detection
     final distanceInMeters = distance * 1000;
 
-    if (distanceInMeters < 100 || estimatedTimeMinutes <= 0) {
+    // CRITICAL: For fallback buses, ignore arrival detection until they turn around
+    // and start traveling in the user's requested direction
+    if (_isFallbackBus && !_hasFallbackBusTurnedAround()) {
+      // Bus is still traveling in the wrong direction - ignore arrival detection
+      print("DEBUG: Fallback bus detected - ignoring arrival detection");
+      print("DEBUG: Bus traveling $_fallbackActualDirection, user requested $_fallbackOriginalDirection");
+      
+      // Still update distance and ETA, but don't trigger arrival
+      if (distanceInMeters < 500) {
+        arrivalStatus = 'Fallback Bus - Approaching';
+        isOnTime = true;
+        print("DEBUG: Fallback bus approaching stop (but going wrong direction)");
+      } else if (distanceInMeters < 1000) {
+        arrivalStatus = 'Fallback Bus - Nearby';
+        isOnTime = true;
+        print("DEBUG: Fallback bus nearby (but going wrong direction)");
+      } else {
+        arrivalStatus = 'Fallback Bus - En Route';
+        isOnTime = true;
+        print("DEBUG: Fallback bus en route (will turn around)");
+      }
+    } else if (distanceInMeters < 100 || estimatedTimeMinutes <= 0) {
       // Double-check that we're still actively tracking before triggering arrival
       if (!_isStreamActive) {
         print("DEBUG: Stream no longer active - skipping arrival trigger");
@@ -2849,6 +2875,21 @@ class TrackBusState extends ConsumerState<TrackBus> {
     print('[DEBUG] Bus direction: ${busData.direction}');
     print('[DEBUG] Is fallback bus: ${busData.isFallback}');
     
+    // Update fallback bus tracking state
+    _isFallbackBus = busData.isFallback ?? false;
+    _fallbackOriginalDirection = busData.originalDirection;
+    _fallbackActualDirection = busData.direction;
+    
+    if (_isFallbackBus) {
+      print('[DEBUG] Fallback bus detected - Original: $_fallbackOriginalDirection, Actual: $_fallbackActualDirection');
+      
+      // Show fallback notification once per session
+      if (!_fallbackNotificationShown) {
+        _showFallbackNotification(_fallbackOriginalDirection ?? 'Unknown', _fallbackActualDirection ?? 'Unknown');
+        _fallbackNotificationShown = true;
+      }
+    }
+    
     // Update the current bus location in the provider
     ref.read(currentBusLocationProvider.notifier).state = busData.coordinates;
     
@@ -2944,6 +2985,11 @@ class TrackBusState extends ConsumerState<TrackBus> {
     _previousBusLocation = null;
     _currentBusBearing = 0.0;
     _fallbackNotificationShown = false; // Reset fallback notification flag for new session
+    
+    // Reset fallback bus state
+    _isFallbackBus = false;
+    _fallbackOriginalDirection = null;
+    _fallbackActualDirection = null;
 
     // Activate stream
     setState(() {
@@ -3416,6 +3462,27 @@ class TrackBusState extends ConsumerState<TrackBus> {
     }
     
     return nearestIndex;
+  }
+
+  /// Check if a fallback bus has completed its route and turned around
+  /// This is a simplified implementation - in reality, we'd need more sophisticated
+  /// direction detection based on route progress and GPS bearing
+  bool _hasFallbackBusTurnedAround() {
+    if (!_isFallbackBus || _fallbackOriginalDirection == null || _fallbackActualDirection == null) {
+      return false;
+    }
+    
+    // For now, we'll use a simple heuristic:
+    // If the bus direction in the data changes to match the requested direction,
+    // then it has turned around. This would need to be enhanced with proper
+    // route terminus detection and direction change logic.
+    
+    // TODO: Implement proper direction change detection based on:
+    // 1. Bus reaching the terminus of its current route
+    // 2. GPS bearing indicating direction change
+    // 3. Route progress indicating turnaround
+    
+    return _fallbackActualDirection?.toLowerCase() == _fallbackOriginalDirection?.toLowerCase();
   }
 
   double _calculateDistance(LatLng from, LatLng to) {
