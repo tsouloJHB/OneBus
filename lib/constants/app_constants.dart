@@ -11,8 +11,8 @@ class AppConstants {
   static const String apiBaseUrl = 'http://10.0.2.2:8080/api';
 
   // Alternative endpoints if the above doesn't work
-  // static const String webSocketUrl = 'ws://192.168.8.173:8080/ws/bus-updates/websocket'; // Physical device
+  // static const String webSocketUrl = 'ws://192.168.8.173:8080/ws/bus-updates'; // Physical device
   // static const String apiBaseUrl = 'http://192.168.8.173:8080/api'; // Physical device
-  // static const String webSocketUrl = 'ws://localhost:8080/ws/bus-updates/websocket'; // iOS Simulator
+  // static const String webSocketUrl = 'ws://localhost:8080/ws/bus-updates'; // iOS Simulator
   // static const String apiBaseUrl = 'http://localhost:8080/api'; // iOS Simulator
 }

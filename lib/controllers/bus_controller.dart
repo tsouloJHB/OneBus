@@ -55,12 +55,23 @@ List<String> _getHardcodedBusesFallback(String companyName) {
   }
 }
 
+// Provider to store the current BusCommunicationServices instance for cleanup
+// REMOVED: This was causing Riverpod initialization issues
+
 final busTrackingStreamProvider = StreamProvider.autoDispose
     .family<BusLocationData, Map<String, dynamic>>((ref, params) {
   final busCompany = ref.watch(selectedBusCompanyState);
   final busService = BusCommunicationServices();
+  
+  // CRITICAL: Ensure cleanup on provider dispose
+  ref.onDispose(() {
+    print('[DEBUG] ===== PROVIDER DISPOSING - FORCING WEBSOCKET CLEANUP =====');
+    busService.closeConnection(reason: 'provider_dispose');
+    print('[DEBUG] ===== PROVIDER DISPOSE COMPLETE =====');
+  });
+  
   // Expect params: {busNumber, direction, busStopIndex, latitude, longitude}
-  return busService.streamBusLocationLive(
+  final stream = busService.streamBusLocationLive(
     busNumber: params['busNumber'] ?? 'C5',
     busCompany: busCompany,
     direction: params['direction'] ?? 'Northbound',
@@ -68,6 +79,9 @@ final busTrackingStreamProvider = StreamProvider.autoDispose
     latitude: params['latitude'],
     longitude: params['longitude'],
   );
+  
+  // Convert to broadcast stream to allow multiple listeners without creating duplicate connections
+  return stream.asBroadcastStream();
 });
 
 class BusController {

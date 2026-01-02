@@ -16,6 +16,9 @@ import '../models/bus_position.model.dart';
 import '../models/bus_location_data.dart';
 
 class BusCommunicationServices {
+  // Instance-based approach instead of static
+  StompClient? _stompClient;
+  StreamController<BusLocationData>? _currentController;
 
   static Future<void> sendBusInfo(BusInfo busInfo) async {
     //   try {
@@ -155,16 +158,69 @@ class BusCommunicationServices {
     double? latitude,
     double? longitude,
   }) {
-    final controller = StreamController<BusLocationData>();
+    final controller = StreamController<BusLocationData>(); // Single-subscription is fine
     final primaryTopic = "/topic/bus/${busNumber}_${direction}";
     
     StompClient? stompClient;
     Timer? connectionTimeout;
     bool hasReceivedData = false;
+    String? specificBusTopic; // Track the specific bus topic we're subscribed to
 
     print('[DEBUG] streamBusLocationLive: Initializing for bus $busNumber, direction $direction');
     print('[DEBUG] streamBusLocationLive: Primary topic: $primaryTopic');
     print('[DEBUG] streamBusLocationLive: WebSocket URL: ${AppConstants.webSocketUrl}');
+
+    // Common callback for handling bus location data
+    void handleBusLocationData(StompFrame frame) {
+      if (frame.body != null) {
+        try {
+          final data = json.decode(frame.body!);
+          print('[DEBUG] Received data on ${frame.headers['destination']}: $data');
+          hasReceivedData = true;
+
+          // Check if this is a bus-offline event
+          if (data['event'] == 'bus-offline') {
+            print('[DEBUG] Bus went offline: ${data['busId']}');
+            if (!controller.isClosed) {
+              controller.addError('Bus is no longer available');
+              controller.close();
+            }
+            return;
+          }
+
+          // Map the backend data to our BusLocationData model
+          controller.add(
+            BusLocationData(
+              busNumber: data['busNumber'] ?? busNumber,
+              busCompany: busCompany,
+              direction: data['tripDirection'] ?? direction,
+              coordinates: LatLng(
+                data['lat']?.toDouble() ??
+                    data['latitude']?.toDouble() ??
+                    0.0,
+                data['lon']?.toDouble() ??
+                    data['longitude']?.toDouble() ??
+                    0.0,
+              ),
+              speed: data['speedKmh']?.toDouble() ??
+                  data['speed']?.toDouble() ??
+                  0.0,
+              isActive: true,
+              lastUpdated: DateTime.now(),
+              // Check if this is fallback data (different direction than requested)
+              isFallback: (data['tripDirection'] ?? direction).toLowerCase() != direction.toLowerCase(),
+              fallbackDirection: (data['tripDirection'] ?? direction).toLowerCase() != direction.toLowerCase() 
+                  ? (data['tripDirection'] ?? direction) : null,
+              originalDirection: (data['tripDirection'] ?? direction).toLowerCase() != direction.toLowerCase() 
+                  ? direction : null,
+            ),
+          );
+        } catch (e) {
+          print('[ERROR] Failed to parse bus data: $e');
+          print('[ERROR] Raw data: ${frame.body}');
+        }
+      }
+    }
 
     stompClient = StompClient(
       config: StompConfig(
@@ -183,75 +239,61 @@ class BusCommunicationServices {
           print('[SUCCESS] streamBusLocationLive: Connected to WebSocket');
           connectionTimeout?.cancel();
 
-          // Subscribe to the primary direction topic
+          // Subscribe to the primary direction topic (fallback)
+          print('[DEBUG] Subscribing to primary topic: $primaryTopic');
           stompClient?.subscribe(
             destination: primaryTopic,
+            callback: handleBusLocationData,
+          );
+
+          // Subscribe to the subscription status topic to get the selected bus ID
+          // This MUST be done before sending the subscription request
+          print('[DEBUG] Subscribing to subscription status topic');
+          stompClient?.subscribe(
+            destination: '/topic/bus/subscription-status',
             callback: (frame) {
               if (frame.body != null) {
                 try {
-                  final data = json.decode(frame.body!);
-                  print('[DEBUG] Received data for $busNumber $direction: $data');
-                  hasReceivedData = true;
-
-                  // Check if this is a bus-offline event
-                  if (data['event'] == 'bus-offline') {
-                    print('[DEBUG] Bus went offline: ${data['busId']}');
-                    if (!controller.isClosed) {
-                      controller.addError('Bus is no longer available');
-                      controller.close();
-                    }
-                    return;
+                  final statusData = json.decode(frame.body!);
+                  print('[DEBUG] ✅ Subscription status received: $statusData');
+                  
+                  // If backend selected a specific bus, we'll receive data on the primary topic
+                  // No need to create a second subscription - the backend will route data appropriately
+                  if (statusData['selectedBusId'] != null) {
+                    final selectedBusId = statusData['selectedBusId'] as String;
+                    print('[DEBUG] 🚌 Backend selected specific bus: $selectedBusId');
+                    print('[DEBUG] 📡 Data will be received on primary topic: $primaryTopic');
+                    // Note: We don't create a second subscription here to avoid duplicates
+                  } else {
+                    print('[DEBUG] ⚠️ No specific bus selected, using primary topic only');
                   }
-
-                  // Map the backend data to our BusLocationData model
-                  controller.add(
-                    BusLocationData(
-                      busNumber: data['busNumber'] ?? busNumber,
-                      busCompany: busCompany,
-                      direction: data['tripDirection'] ?? direction,
-                      coordinates: LatLng(
-                        data['lat']?.toDouble() ??
-                            data['latitude']?.toDouble() ??
-                            0.0,
-                        data['lon']?.toDouble() ??
-                            data['longitude']?.toDouble() ??
-                            0.0,
-                      ),
-                      speed: data['speedKmh']?.toDouble() ??
-                          data['speed']?.toDouble() ??
-                          0.0,
-                      isActive: true,
-                      lastUpdated: DateTime.now(),
-                      // Check if this is fallback data (different direction than requested)
-                      isFallback: (data['tripDirection'] ?? direction).toLowerCase() != direction.toLowerCase(),
-                      fallbackDirection: (data['tripDirection'] ?? direction).toLowerCase() != direction.toLowerCase() 
-                          ? (data['tripDirection'] ?? direction) : null,
-                      originalDirection: (data['tripDirection'] ?? direction).toLowerCase() != direction.toLowerCase() 
-                          ? direction : null,
-                    ),
-                  );
                 } catch (e) {
-                  print('[ERROR] Failed to parse bus data: $e');
+                  print('[ERROR] Failed to parse subscription status: $e');
                   print('[ERROR] Raw data: ${frame.body}');
                 }
               }
             },
           );
 
-          // Send subscription request to backend with smart bus selection
-          print('[DEBUG] streamBusLocationLive: Sending subscription message to /app/subscribe');
-          final Map<String, dynamic> payload = {
-            'busNumber': busNumber,
-            'direction': direction,
-          };
-          if (busStopIndex != null) payload['busStopIndex'] = busStopIndex;
-          if (latitude != null) payload['latitude'] = latitude;
-          if (longitude != null) payload['longitude'] = longitude;
-          
-          stompClient?.send(
-            destination: '/app/subscribe',
-            body: json.encode(payload),
-          );
+          // Wait a brief moment for subscription to be registered, then send request
+          Future.delayed(const Duration(milliseconds: 100), () {
+            // Send subscription request to backend with smart bus selection
+            print('[DEBUG] streamBusLocationLive: Sending subscription message to /app/subscribe');
+            final Map<String, dynamic> payload = {
+              'busNumber': busNumber,
+              'direction': direction,
+            };
+            if (busStopIndex != null) payload['busStopIndex'] = busStopIndex;
+            if (latitude != null) payload['latitude'] = latitude;
+            if (longitude != null) payload['longitude'] = longitude;
+            
+            print('[DEBUG] Subscription payload: $payload');
+            
+            stompClient?.send(
+              destination: '/app/subscribe',
+              body: json.encode(payload),
+            );
+          });
         },
         onWebSocketError: (dynamic error) {
           print('[ERROR] streamBusLocationLive: WebSocket error: $error');
@@ -281,6 +323,10 @@ class BusCommunicationServices {
 
     controller.onListen = () {
       print('[DEBUG] streamBusLocationLive: Activating STOMP client...');
+      
+      // Store references for cleanup
+      _stompClient = stompClient;
+      _currentController = controller;
 
       // Set a timeout to report error if WebSocket doesn't connect
       connectionTimeout = Timer(const Duration(seconds: 10), () {
@@ -296,25 +342,83 @@ class BusCommunicationServices {
     };
 
     controller.onCancel = () {
-      print('[DEBUG] streamBusLocationLive: Deactivating STOMP client...');
+      print('[DEBUG] ===== STREAM CANCELLED =====');
       connectionTimeout?.cancel();
-
-      // Send unsubscribe request to backend
-      if (stompClient != null && stompClient!.connected) {
-        try {
-          stompClient?.send(
-            destination: '/app/unsubscribe',
-            body: json.encode({'busNumber': busNumber, 'direction': direction}),
-          );
-        } catch (e) {
-          print('[WARN] streamBusLocationLive: Failed to send unsubscribe: $e');
-        }
-      }
-
-      stompClient?.deactivate();
+      
+      // Clear references but don't force immediate closure
+      // Let the explicit closeConnection() handle proper cleanup
+      _stompClient = null;
+      _currentController = null;
+      print('[DEBUG] Stream cancelled - references cleared');
     };
 
     return controller.stream;
+  }
+
+  // Instance method to explicitly close connection
+  Future<void> closeConnection({String? reason}) async {
+    print('[DEBUG] ===== EXPLICIT CLOSE CONNECTION CALLED =====');
+    print('[DEBUG] Reason: ${reason ?? "No reason provided"}');
+    print('[DEBUG] StompClient exists: ${_stompClient != null}');
+    print('[DEBUG] StompClient connected: ${_stompClient?.connected ?? false}');
+    
+    final clientToClose = _stompClient;
+    final controllerToClose = _currentController;
+    
+    if (clientToClose != null) {
+      try {
+        if (clientToClose.connected) {
+          print('[DEBUG] Sending cleanup message to backend');
+          try {
+            clientToClose.send(
+              destination: '/app/cleanup',
+              body: json.encode({'reason': reason ?? 'manual_cleanup'}),
+            );
+            // Give the cleanup message time to be sent
+            await Future.delayed(const Duration(milliseconds: 100));
+          } catch (e) {
+            print('[WARN] Failed to send cleanup message: $e');
+          }
+        }
+        
+        // Close the stream controller first
+        if (controllerToClose != null && !controllerToClose.isClosed) {
+          print('[DEBUG] Closing stream controller');
+          await controllerToClose.close();
+        }
+        
+        // CRITICAL: Force deactivate the WebSocket
+        print('[DEBUG] Forcing WebSocket deactivation');
+        clientToClose.deactivate();
+        
+        print('[DEBUG] WebSocket connection closed successfully');
+      } catch (e) {
+        print('[ERROR] Error during WebSocket closure: $e');
+        // Still try to deactivate
+        try {
+          clientToClose.deactivate();
+        } catch (_) {}
+      }
+    } else {
+      print('[DEBUG] No WebSocket client to close');
+      
+      // Still close the controller if it exists
+      if (controllerToClose != null && !controllerToClose.isClosed) {
+        print('[DEBUG] Closing orphaned stream controller');
+        await controllerToClose.close();
+      }
+    }
+    
+    // Clear references after cleanup
+    _stompClient = null;
+    _currentController = null;
+    print('[DEBUG] ===== EXPLICIT CLOSE CONNECTION COMPLETE =====');
+  }
+
+  // Static method to explicitly close active WebSocket connection
+  static Future<void> closeActiveConnection({String? reason}) async {
+    // This method is now deprecated - use instance method instead
+    print('[WARN] closeActiveConnection is deprecated - use instance method closeConnection instead');
   }
 
   // Test method to check WebSocket connectivity

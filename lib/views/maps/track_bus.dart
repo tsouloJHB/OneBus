@@ -92,6 +92,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
   // Replace modal dialog with overlay approach
   Widget? _loadingOverlay;
   ProviderSubscription<AsyncValue<BusLocationData>>? _busStreamSubscription;
+  
+  // Track if we've already shown the fallback notification for this session
+  bool _fallbackNotificationShown = false;
 
   @override
   void initState() {
@@ -329,15 +332,22 @@ class TrackBusState extends ConsumerState<TrackBus> {
         return;
       }
       
+      print("DEBUG: ===== BUS ARRIVAL DETECTED =====");
+      print("DEBUG: Distance: ${distanceInMeters}m, ETA: ${estimatedTimeMinutes}min");
+      
       arrivalStatus = 'Bus has arrived';
       isOnTime = true;
       print("DEBUG: Bus has arrived at destination");
 
       // Stop tracking when bus arrives
+      print("DEBUG: Calling _stopTrackingOnArrival()...");
       _stopTrackingOnArrival();
 
       // Show arrival notification
+      print("DEBUG: Calling _showArrivalNotification()...");
       _showArrivalNotification();
+      
+      print("DEBUG: ===== BUS ARRIVAL PROCESSING COMPLETE =====");
     } else if (distanceInMeters < 500) {
       arrivalStatus = 'Arriving';
       isOnTime = true;
@@ -387,34 +397,42 @@ class TrackBusState extends ConsumerState<TrackBus> {
     }
   }
 
-  void _stopTrackingOnArrival() {
-    print("DEBUG: Stopping tracking on arrival");
+  void _stopTrackingOnArrival() async {
+    print("DEBUG: ===== STOPPING TRACKING ON ARRIVAL =====");
+    print("DEBUG: Current stream active: $_isStreamActive");
+    print("DEBUG: Stream subscription exists: ${_busStreamSubscription != null}");
 
-    // Close stream listener
-    _busStreamSubscription?.close();
-    _busStreamSubscription = null;
+    // STEP 1: Close stream subscription to trigger cleanup
+    if (_busStreamSubscription != null) {
+      print("DEBUG: Closing bus stream subscription...");
+      _busStreamSubscription?.close();
+      _busStreamSubscription = null;
+      print("DEBUG: Stream subscription closed");
+      
+      // Give time for onCancel to be triggered and cleanup to happen
+      await Future.delayed(const Duration(milliseconds: 500));
+      print("DEBUG: Waited for cleanup callbacks");
+    }
 
-    // Clear the rotated icons cache
+    // STEP 2: Invalidate the stream provider to ensure cleanup
+    print("DEBUG: Invalidating stream provider...");
+    ref.invalidate(busTrackingStreamProvider);
+
+    // STEP 3: Clear all local state
     _rotatedBusIcons.clear();
-
-    // Reset tracking state
     _previousBusLocation = null;
     _currentBusBearing = 0.0;
 
-    // Deactivate stream
     setState(() {
       _isStreamActive = false;
     });
 
     _hideLoadingDialog();
 
-    // Clear all tracking state comprehensively
+    // STEP 4: Clear tracking state
     ref.read(busTrackingProvider.notifier).clearAllTrackingState();
 
-    // Invalidate the stream provider to stop the stream
-    ref.invalidate(busTrackingStreamProvider);
-
-    print("DEBUG: Tracking stopped successfully - socket closed - showing arrival modal");
+    print("DEBUG: ===== TRACKING STOPPED - SHOWING ARRIVAL MODAL =====");
   }
 
   void _showArrivalNotification() {
@@ -553,11 +571,23 @@ class TrackBusState extends ConsumerState<TrackBus> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () {
+                        onPressed: () async {
                           Navigator.of(context).pop();
                           setState(() {
                             _isDialogVisible = false;
                           });
+                          
+                          // CRITICAL: Close stream subscription to trigger cleanup
+                          print("DEBUG: Closing stream subscription before going home");
+                          _busStreamSubscription?.close();
+                          _busStreamSubscription = null;
+                          
+                          // Invalidate stream provider
+                          ref.invalidate(busTrackingStreamProvider);
+                          
+                          // Give time for cleanup
+                          await Future.delayed(const Duration(milliseconds: 300));
+                          
                           // Navigate to home screen
                           Navigator.pushAndRemoveUntil(
                             context,
@@ -587,11 +617,22 @@ class TrackBusState extends ConsumerState<TrackBus> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: () {
+                        onPressed: () async {
                           Navigator.of(context).pop();
                           setState(() {
                             _isDialogVisible = false;
                           });
+                          
+                          // CRITICAL: Close stream subscription before tracking another bus
+                          print("DEBUG: Closing stream subscription before tracking another bus");
+                          _busStreamSubscription?.close();
+                          _busStreamSubscription = null;
+                          
+                          // Invalidate stream provider
+                          ref.invalidate(busTrackingStreamProvider);
+                          
+                          // Give time for cleanup
+                          await Future.delayed(const Duration(milliseconds: 300));
                           
                           // COMPREHENSIVE STATE RESET
                           print("DEBUG: Comprehensive state reset for new tracking session");
@@ -2085,11 +2126,13 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
   @override
   void dispose() {
+    // Close any active stream subscriptions
     _locationSubscription?.cancel();
     _busStreamSubscription?.close();
     _loadingMessageTimer?.cancel();
     _searchController.dispose();
     _mapController.dispose();
+    
     // Clear rotated bus icons cache to prevent memory leaks
     _rotatedBusIcons.clear();
     super.dispose();
@@ -2879,6 +2922,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
     // Reset bus tracking state for new session
     _previousBusLocation = null;
     _currentBusBearing = 0.0;
+    _fallbackNotificationShown = false; // Reset fallback notification flag for new session
 
     // Activate stream
     setState(() {
@@ -2893,13 +2937,17 @@ class TrackBusState extends ConsumerState<TrackBus> {
     final busStopIndex = selectedBusStop.busStopIndex;
     final direction = selectedBusStop.direction ?? 'Northbound';
     final location = _currentLocation;
-    ref.read(busTrackingStreamProvider({
-      'busNumber': 'C5',
-      'direction': direction,
-      'busStopIndex': busStopIndex,
-      'latitude': location?.latitude,
-      'longitude': location?.longitude,
-    }));
+    
+    // Use bus stop coordinates as fallback if user location is not available
+    final fallbackLatitude = location?.latitude ?? selectedBusStop.coordinates.latitude;
+    final fallbackLongitude = location?.longitude ?? selectedBusStop.coordinates.longitude;
+    
+    print("DEBUG: Subscription parameters:");
+    print("DEBUG: - busStopIndex: $busStopIndex");
+    print("DEBUG: - direction: $direction");
+    print("DEBUG: - user location: $location");
+    print("DEBUG: - fallback latitude: $fallbackLatitude");
+    print("DEBUG: - fallback longitude: $fallbackLongitude");
 
     // Listen for stream errors immediately so we can show a modal on failure
     _busStreamSubscription?.close();
@@ -2909,8 +2957,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
         'busNumber': 'C5',
         'direction': direction,
         'busStopIndex': busStopIndex,
-        'latitude': location?.latitude,
-        'longitude': location?.longitude,
+        'latitude': fallbackLatitude,
+        'longitude': fallbackLongitude,
       }),
       (previous, next) {
         print('[DEBUG] Stream listener callback triggered - hasError: ${next.hasError}, hasValue: ${next.hasValue}, isLoading: ${next.isLoading}');
@@ -2951,12 +2999,18 @@ class TrackBusState extends ConsumerState<TrackBus> {
           final data = next.value!;
           
           // Handle fallback bus data (when server returns opposite direction)
+          // Only show notification ONCE per tracking session, not on every position update
           if (data.isFallback && data.originalDirection != null && data.fallbackDirection != null) {
-            print('[DEBUG] Received fallback bus data - showing user notification');
-            
-            // Show fallback notification to user
-            if (mounted) {
-              _showFallbackNotification(data.originalDirection!, data.fallbackDirection!);
+            if (!_fallbackNotificationShown) {
+              print('[DEBUG] Received fallback bus data - showing user notification (FIRST TIME)');
+              
+              // Show fallback notification to user only once
+              if (mounted) {
+                _showFallbackNotification(data.originalDirection!, data.fallbackDirection!);
+                _fallbackNotificationShown = true; // Mark as shown
+              }
+            } else {
+              print('[DEBUG] Fallback notification already shown, skipping repeat');
             }
           }
           
