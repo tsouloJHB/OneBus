@@ -418,13 +418,20 @@ class TrackBusState extends ConsumerState<TrackBus> {
     print("DEBUG: Invalidating stream provider...");
     ref.invalidate(busTrackingStreamProvider);
 
-    // STEP 3: Clear all local state
+    // STEP 3: Clear all local state and map elements
     _rotatedBusIcons.clear();
     _previousBusLocation = null;
     _currentBusBearing = 0.0;
 
     setState(() {
       _isStreamActive = false;
+      // Clear all polylines and fallback markers
+      _routePolylines.clear();
+      markers.removeWhere((marker) => 
+        marker.markerId.value == 'terminus_marker' || 
+        marker.markerId.value == 'requested_start_marker' ||
+        marker.markerId == busMarkerId
+      );
     });
 
     _hideLoadingDialog();
@@ -2840,6 +2847,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
     print('[DEBUG] Processing bus location update: ${busData.coordinates}');
     print('[DEBUG] Bus speed: ${busData.speed} km/h');
     print('[DEBUG] Bus direction: ${busData.direction}');
+    print('[DEBUG] Is fallback bus: ${busData.isFallback}');
     
     // Update the current bus location in the provider
     ref.read(currentBusLocationProvider.notifier).state = busData.coordinates;
@@ -2889,7 +2897,20 @@ class TrackBusState extends ConsumerState<TrackBus> {
     // Redraw polyline with updated bus position
     final currentBus = ref.read(selectedBusStateProvider);
     if (currentBus.isNotEmpty && _isStreamActive) {
-      _loadAndDrawRoutePolyline(currentBus, busData.direction ?? 'Northbound');
+      if (busData.isFallback && busData.originalDirection != null) {
+        // Draw enhanced fallback route visualization
+        print('[DEBUG] Drawing fallback route visualization');
+        _drawFallbackRouteVisualization(
+          currentBus, 
+          busData.direction ?? 'Southbound', // Actual bus direction
+          busData.originalDirection!, // User's requested direction
+          busData.coordinates,
+          selectedBusStop
+        );
+      } else {
+        // Draw normal route polyline
+        _loadAndDrawRoutePolyline(currentBus, busData.direction ?? 'Northbound');
+      }
     }
     
     // Move camera to follow bus if enabled
@@ -3097,6 +3118,148 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
     // Force UI update
     setState(() {});
+  }
+
+  /// Enhanced fallback route visualization showing complete journey
+  /// Draws multiple polylines: bus→terminus, terminus→start, start→user_stop
+  Future<void> _drawFallbackRouteVisualization(
+    String busNumber,
+    String actualDirection,
+    String requestedDirection,
+    LatLng busLocation,
+    BusStop selectedBusStop
+  ) async {
+    print('[DEBUG] Drawing fallback route visualization:');
+    print('[DEBUG] - Bus: $busNumber');
+    print('[DEBUG] - Actual direction: $actualDirection');
+    print('[DEBUG] - Requested direction: $requestedDirection');
+    print('[DEBUG] - Bus location: $busLocation');
+    print('[DEBUG] - Selected stop: ${selectedBusStop.address}');
+    
+    try {
+      // Fetch both route directions
+      final actualRoute = await FullRouteService.findFullRouteByBusAndDirection(
+        busNumber: busNumber,
+        direction: actualDirection,
+        companyId: 1,
+      );
+      
+      final requestedRoute = await FullRouteService.findFullRouteByBusAndDirection(
+        busNumber: busNumber,
+        direction: requestedDirection,
+        companyId: 1,
+      );
+      
+      if (actualRoute == null || requestedRoute == null) {
+        print('[DEBUG] Could not load both routes, falling back to simple polyline');
+        _loadAndDrawRoutePolyline(busNumber, actualDirection);
+        return;
+      }
+      
+      final actualRouteCoords = actualRoute.toLatLngList();
+      final requestedRouteCoords = requestedRoute.toLatLngList();
+      
+      print('[DEBUG] Actual route has ${actualRouteCoords.length} coordinates');
+      print('[DEBUG] Requested route has ${requestedRouteCoords.length} coordinates');
+      
+      // Find key points
+      final busIndex = _findNearestPointIndex(busLocation, actualRouteCoords);
+      final actualTerminus = actualRouteCoords.last; // End of actual route
+      final requestedStart = requestedRouteCoords.first; // Start of requested route
+      final stopIndex = _findNearestPointIndex(selectedBusStop.coordinates, requestedRouteCoords);
+      
+      print('[DEBUG] Key points:');
+      print('[DEBUG] - Bus at index: $busIndex');
+      print('[DEBUG] - Actual terminus: $actualTerminus');
+      print('[DEBUG] - Requested start: $requestedStart');
+      print('[DEBUG] - Stop at index: $stopIndex');
+      
+      Set<Polyline> polylines = {};
+      
+      // 1. Bus current position → End of actual route (e.g., Southbound terminus)
+      List<LatLng> segment1 = [busLocation];
+      segment1.addAll(actualRouteCoords.sublist(busIndex));
+      
+      polylines.add(Polyline(
+        polylineId: const PolylineId('fallback_segment1'),
+        color: Colors.orange, // Orange for current bus route
+        width: 5,
+        points: segment1,
+        patterns: [
+          PatternItem.dash(15),
+          PatternItem.gap(8),
+        ],
+      ));
+      
+      // 2. Terminus → Start of requested route (connection line)
+      // This represents the bus turning around or the connection between routes
+      polylines.add(Polyline(
+        polylineId: const PolylineId('fallback_connection'),
+        color: Colors.red, // Red for connection/transfer
+        width: 4,
+        points: [actualTerminus, requestedStart],
+        patterns: [
+          PatternItem.dash(5),
+          PatternItem.gap(10),
+        ],
+      ));
+      
+      // 3. Start of requested route → User's selected stop
+      List<LatLng> segment3 = requestedRouteCoords.sublist(0, stopIndex + 1);
+      
+      polylines.add(Polyline(
+        polylineId: const PolylineId('fallback_segment3'),
+        color: Colors.green, // Green for user's requested route
+        width: 5,
+        points: segment3,
+        patterns: [
+          PatternItem.dash(20),
+          PatternItem.gap(10),
+        ],
+      ));
+      
+      // Add markers for key points
+      Set<Marker> fallbackMarkers = {};
+      
+      // Terminus marker
+      fallbackMarkers.add(Marker(
+        markerId: const MarkerId('terminus_marker'),
+        position: actualTerminus,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+        infoWindow: InfoWindow(
+          title: '$actualDirection Terminus',
+          snippet: 'Bus will turn around here',
+        ),
+      ));
+      
+      // Requested route start marker
+      fallbackMarkers.add(Marker(
+        markerId: const MarkerId('requested_start_marker'),
+        position: requestedStart,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        infoWindow: InfoWindow(
+          title: '$requestedDirection Start',
+          snippet: 'Your route begins here',
+        ),
+      ));
+      
+      setState(() {
+        _routePolylines = polylines;
+        // Add fallback markers to existing markers
+        markers.addAll(fallbackMarkers);
+      });
+      
+      print('[DEBUG] Fallback route visualization complete:');
+      print('[DEBUG] - Segment 1 (bus→terminus): ${segment1.length} points');
+      print('[DEBUG] - Connection (terminus→start): 2 points');
+      print('[DEBUG] - Segment 3 (start→stop): ${segment3.length} points');
+      print('[DEBUG] - Added ${fallbackMarkers.length} route markers');
+      
+    } catch (e) {
+      print('[ERROR] Failed to draw fallback route visualization: $e');
+      // Fallback to simple polyline
+      _loadAndDrawRoutePolyline(busNumber, actualDirection);
+    }
   }
 
   /// Load and draw the route polyline from bus position to selected bus stop only
