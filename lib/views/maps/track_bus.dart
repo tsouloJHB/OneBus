@@ -27,6 +27,7 @@ import 'package:onebus/views/maps/widegts/menu_button_widget.dart';
 import 'package:onebus/views/maps/widegts/search_location_overlay.dart';
 import 'package:onebus/views/maps/widegts/selection_location_sheet.dart';
 import 'package:onebus/models/bus_location_data.dart';
+import 'package:onebus/strategies/bus_company_strategy_factory.dart';
 
 final selectedBusStateProvider = StateProvider<String>((ref) => '');
 final selectedDirectionProvider = StateProvider<String?>((ref) => null);
@@ -323,31 +324,36 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
     print("DEBUG: Calculated ETA: $estimatedTimeMinutes minutes");
 
+    // Get company-specific strategy for arrival status messages
+    final companyName = busController.getBusCompany();
+    final strategy = BusCompanyStrategyFactory.getStrategy(companyName);
+    final statusMessages = strategy.getArrivalStatusMessages();
+
     // Determine bus arrival status
-    String arrivalStatus = 'On Time';
+    String arrivalStatus = statusMessages['onTime']!;
     bool isOnTime = true;
 
     // Convert distance to meters for more precise arrival detection
     final distanceInMeters = distance * 1000;
 
-    // CRITICAL: For fallback buses, ignore arrival detection until they turn around
-    // and start traveling in the user's requested direction
-    if (_isFallbackBus && !_hasFallbackBusTurnedAround()) {
+    // CRITICAL: For companies that support smart bus selection, 
+    // ignore arrival detection for fallback buses until they turn around
+    if (_isFallbackBus && strategy.shouldIgnoreArrivalForFallbackBus() && !_hasFallbackBusTurnedAround()) {
       // Bus is still traveling in the wrong direction - ignore arrival detection
-      print("DEBUG: Fallback bus detected - ignoring arrival detection");
+      print("DEBUG: Fallback bus detected - ignoring arrival detection (company: $companyName)");
       print("DEBUG: Bus traveling $_fallbackActualDirection, user requested $_fallbackOriginalDirection");
       
       // Still update distance and ETA, but don't trigger arrival
       if (distanceInMeters < 500) {
-        arrivalStatus = 'Fallback Bus - Approaching';
+        arrivalStatus = statusMessages['fallbackApproaching']!;
         isOnTime = true;
         print("DEBUG: Fallback bus approaching stop (but going wrong direction)");
       } else if (distanceInMeters < 1000) {
-        arrivalStatus = 'Fallback Bus - Nearby';
+        arrivalStatus = statusMessages['fallbackNearby']!;
         isOnTime = true;
         print("DEBUG: Fallback bus nearby (but going wrong direction)");
       } else {
-        arrivalStatus = 'Fallback Bus - En Route';
+        arrivalStatus = statusMessages['fallbackEnRoute']!;
         isOnTime = true;
         print("DEBUG: Fallback bus en route (will turn around)");
       }
@@ -361,7 +367,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
       print("DEBUG: ===== BUS ARRIVAL DETECTED =====");
       print("DEBUG: Distance: ${distanceInMeters}m, ETA: ${estimatedTimeMinutes}min");
       
-      arrivalStatus = 'Bus has arrived';
+      arrivalStatus = statusMessages['arrived']!;
       isOnTime = true;
       print("DEBUG: Bus has arrived at destination");
 
@@ -375,15 +381,15 @@ class TrackBusState extends ConsumerState<TrackBus> {
       
       print("DEBUG: ===== BUS ARRIVAL PROCESSING COMPLETE =====");
     } else if (distanceInMeters < 500) {
-      arrivalStatus = 'Arriving';
+      arrivalStatus = statusMessages['arriving']!;
       isOnTime = true;
       print("DEBUG: Bus is arriving at destination");
     } else if (distanceInMeters < 1000) {
-      arrivalStatus = 'Very Close';
+      arrivalStatus = statusMessages['veryClose']!;
       isOnTime = true;
       print("DEBUG: Bus is very close to destination");
     } else {
-      arrivalStatus = 'On Time';
+      arrivalStatus = statusMessages['onTime']!;
       isOnTime = true;
       print("DEBUG: Bus is on time");
     }
@@ -478,6 +484,12 @@ class TrackBusState extends ConsumerState<TrackBus> {
   void _showFallbackNotification(String originalDirection, String fallbackDirection) {
     if (!mounted) return;
 
+    // Get company-specific notification message
+    final companyName = busController.getBusCompany();
+    final strategy = BusCompanyStrategyFactory.getStrategy(companyName);
+    final notificationMessage = strategy.getFallbackNotificationMessage(originalDirection, fallbackDirection);
+    final companyColors = strategy.getCompanyColors();
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -490,11 +502,11 @@ class TrackBusState extends ConsumerState<TrackBus> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'No $originalDirection buses available',
+                    notificationMessage['title']!,
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   Text(
-                    'Showing $fallbackDirection bus instead',
+                    notificationMessage['message']!,
                     style: const TextStyle(fontSize: 12),
                   ),
                 ],
@@ -502,7 +514,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
             ),
           ],
         ),
-        backgroundColor: Colors.orange,
+        backgroundColor: companyColors['secondary'] ?? Colors.orange,
         duration: const Duration(seconds: 6),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
@@ -874,30 +886,23 @@ class TrackBusState extends ConsumerState<TrackBus> {
   Widget _buildLoadingOverlay() {
     if (!_isLoadingDialogVisible) return const SizedBox.shrink();
     
+    // Get company-specific loading messages
+    final companyName = busController.getBusCompany();
+    final strategy = BusCompanyStrategyFactory.getStrategy(companyName);
+    final loadingMessages = strategy.getLoadingMessages();
+    final companyColors = strategy.getCompanyColors();
+    
     String title;
     String message;
     
-    switch (_loadingStep) {
-      case 0:
-        title = 'Connecting to bus...';
-        message = 'Establishing connection to the tracking system';
-        break;
-      case 1:
-        title = 'Searching for bus...';
-        message = 'Looking for your selected bus on the route';
-        break;
-      case 2:
-        title = 'Trying alternative direction...';
-        message = 'No buses found in selected direction, checking opposite direction';
-        break;
-      case 3:
-        title = 'Still searching...';
-        message = 'This is taking longer than usual. The bus may not be currently active.';
-        break;
-      default:
-        title = 'Almost there...';
-        message = 'Please wait a bit longer or try selecting a different bus';
-        break;
+    // Use company-specific messages if available, otherwise fallback to defaults
+    if (_loadingStep < loadingMessages.length) {
+      final parts = loadingMessages[_loadingStep].split('...');
+      title = parts[0] + '...';
+      message = parts.length > 1 ? parts[1] : 'Please wait while we process your request';
+    } else {
+      title = 'Almost there...';
+      message = 'Please wait a bit longer or try selecting a different bus';
     }
     
     return Container(
@@ -910,7 +915,11 @@ class TrackBusState extends ConsumerState<TrackBus> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(),
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    companyColors['primary'] ?? Colors.blue
+                  ),
+                ),
                 const SizedBox(height: 20),
                 Text(
                   title,
@@ -925,10 +934,10 @@ class TrackBusState extends ConsumerState<TrackBus> {
                 ),
                 const SizedBox(height: 20),
                 LinearProgressIndicator(
-                  value: (_loadingStep + 1) / 5,
+                  value: (_loadingStep + 1) / loadingMessages.length,
                   backgroundColor: Colors.grey[300],
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    _loadingStep == 2 ? Colors.orange : Colors.blue
+                    _loadingStep == 2 ? (companyColors['secondary'] ?? Colors.orange) : (companyColors['primary'] ?? Colors.blue)
                   ),
                 ),
                 if (_loadingStep >= 2) ...[
@@ -940,6 +949,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
                       ref.read(currentScreenStateProvider.notifier).state = ScreenState.searchBus;
                       _stopTracking(changeScreenState: false);
                     },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: companyColors['primary'] ?? Colors.blue,
+                    ),
                     child: const Text('Cancel'),
                   ),
                 ],
@@ -2938,9 +2950,13 @@ class TrackBusState extends ConsumerState<TrackBus> {
     // Redraw polyline with updated bus position
     final currentBus = ref.read(selectedBusStateProvider);
     if (currentBus.isNotEmpty && _isStreamActive) {
-      if (busData.isFallback && busData.originalDirection != null) {
-        // Draw enhanced fallback route visualization
-        print('[DEBUG] Drawing fallback route visualization');
+      // Check if company supports fallback visualization
+      final companyName = busController.getBusCompany();
+      final strategy = BusCompanyStrategyFactory.getStrategy(companyName);
+      
+      if (busData.isFallback && busData.originalDirection != null && strategy.supportsFallbackVisualization()) {
+        // Draw enhanced fallback route visualization for supported companies
+        print('[DEBUG] Drawing fallback route visualization for company: $companyName');
         _drawFallbackRouteVisualization(
           currentBus, 
           busData.direction ?? 'Southbound', // Actual bus direction
@@ -2949,7 +2965,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
           selectedBusStop
         );
       } else {
-        // Draw normal route polyline
+        // Draw normal route polyline for non-supported companies or normal buses
+        print('[DEBUG] Drawing normal route polyline (company: $companyName, supports fallback: ${strategy.supportsFallbackVisualization()})');
         _loadAndDrawRoutePolyline(currentBus, busData.direction ?? 'Northbound');
       }
     }
@@ -3182,6 +3199,11 @@ class TrackBusState extends ConsumerState<TrackBus> {
     print('[DEBUG] - Bus location: $busLocation');
     print('[DEBUG] - Selected stop: ${selectedBusStop.address}');
     
+    // Get company-specific colors
+    final companyName = busController.getBusCompany();
+    final strategy = BusCompanyStrategyFactory.getStrategy(companyName);
+    final companyColors = strategy.getCompanyColors();
+    
     try {
       // Fetch both route directions
       final actualRoute = await FullRouteService.findFullRouteByBusAndDirection(
@@ -3228,7 +3250,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
       
       polylines.add(Polyline(
         polylineId: const PolylineId('fallback_segment1'),
-        color: Colors.orange, // Orange for current bus route
+        color: companyColors['fallbackRoute'] ?? Colors.orange, // Company-specific fallback route color
         width: 5,
         points: segment1,
         patterns: [
@@ -3241,7 +3263,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
       // This represents the bus turning around or the connection between routes
       polylines.add(Polyline(
         polylineId: const PolylineId('fallback_connection'),
-        color: Colors.red, // Red for connection/transfer
+        color: companyColors['connectionRoute'] ?? Colors.red, // Company-specific connection color
         width: 4,
         points: [actualTerminus, requestedStart],
         patterns: [
@@ -3255,7 +3277,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
       
       polylines.add(Polyline(
         polylineId: const PolylineId('fallback_segment3'),
-        color: Colors.green, // Green for user's requested route
+        color: companyColors['requestedRoute'] ?? Colors.green, // Company-specific requested route color
         width: 5,
         points: segment3,
         patterns: [
@@ -3295,7 +3317,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
         markers.addAll(fallbackMarkers);
       });
       
-      print('[DEBUG] Fallback route visualization complete:');
+      print('[DEBUG] Fallback route visualization complete (company: $companyName):');
       print('[DEBUG] - Segment 1 (bus→terminus): ${segment1.length} points');
       print('[DEBUG] - Connection (terminus→start): 2 points');
       print('[DEBUG] - Segment 3 (start→stop): ${segment3.length} points');
