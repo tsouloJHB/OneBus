@@ -292,7 +292,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
     });
   }
 
-  void _updateDistanceAndETA(LatLng busLocation, BusStop selectedBusStop) {
+  void _updateDistanceAndETA(LatLng busLocation, BusStop selectedBusStop, {BusLocationData? busData}) {
     print("DEBUG: _updateDistanceAndETA called");
     if (!mounted) return;
 
@@ -309,20 +309,27 @@ class TrackBusState extends ConsumerState<TrackBus> {
     }
 
     print("DEBUG: Updating distance and ETA calculations");
-    print("DEBUG: Bus Location: $busLocation");
-    print("DEBUG: Bus Stop Location: ${selectedBusStop.coordinates}");
+    
+    // USE ACCURATE ROUTE-BASED DISTANCE FROM BACKEND IF AVAILABLE
+    double distance;
+    double estimatedTimeMinutes;
+    bool isRouteBased = false;
 
-    final distance =
-        _calculateDistance(busLocation, selectedBusStop.coordinates);
-    print("DEBUG: Calculated distance: $distance km");
+    if (busData != null && busData.distanceKm != null && busData.estimatedTimeMinutes != null) {
+      distance = busData.distanceKm!;
+      estimatedTimeMinutes = busData.estimatedTimeMinutes!.roundToDouble();
+      isRouteBased = true;
+      print("DEBUG: Using ACCURATE route-based tracking data from backend");
+    } else {
+      // Fallback to straight-line if backend hasn't provided route distance yet
+      distance = _calculateDistance(busLocation, selectedBusStop.coordinates);
+      final averageSpeedKmH = 30.0;
+      final estimatedTimeHours = distance / averageSpeedKmH;
+      estimatedTimeMinutes = (estimatedTimeHours * 60).roundToDouble();
+      print("DEBUG: Using fallback straight-line calculations (route data missing)");
+    }
 
-    // Calculate ETA based on current bus speed and distance
-    // Assuming average speed of 30 km/h if actual speed is not available
-    final averageSpeedKmH = 30.0;
-    final estimatedTimeHours = distance / averageSpeedKmH;
-    final estimatedTimeMinutes = (estimatedTimeHours * 60).round();
-
-    print("DEBUG: Calculated ETA: $estimatedTimeMinutes minutes");
+    print("DEBUG: Distance: $distance km, ETA: $estimatedTimeMinutes minutes (Route-based: $isRouteBased)");
 
     // Get company-specific strategy for arrival status messages
     final companyName = busController.getBusCompany();
@@ -341,90 +348,52 @@ class TrackBusState extends ConsumerState<TrackBus> {
     if (_isFallbackBus && strategy.shouldIgnoreArrivalForFallbackBus() && !_hasFallbackBusTurnedAround()) {
       // Bus is still traveling in the wrong direction - ignore arrival detection
       print("DEBUG: Fallback bus detected - ignoring arrival detection (company: $companyName)");
-      print("DEBUG: Bus traveling $_fallbackActualDirection, user requested $_fallbackOriginalDirection");
       
       // Still update distance and ETA, but don't trigger arrival
       if (distanceInMeters < 500) {
         arrivalStatus = statusMessages['fallbackApproaching']!;
-        isOnTime = true;
-        print("DEBUG: Fallback bus approaching stop (but going wrong direction)");
       } else if (distanceInMeters < 1000) {
         arrivalStatus = statusMessages['fallbackNearby']!;
-        isOnTime = true;
-        print("DEBUG: Fallback bus nearby (but going wrong direction)");
       } else {
         arrivalStatus = statusMessages['fallbackEnRoute']!;
-        isOnTime = true;
-        print("DEBUG: Fallback bus en route (will turn around)");
       }
-    } else if (distanceInMeters < 100 || estimatedTimeMinutes <= 0) {
+    } else if (distanceInMeters < 100 || (isRouteBased && estimatedTimeMinutes <= 0)) {
       // Double-check that we're still actively tracking before triggering arrival
-      if (!_isStreamActive) {
-        print("DEBUG: Stream no longer active - skipping arrival trigger");
-        return;
-      }
+      if (!_isStreamActive) return;
       
       print("DEBUG: ===== BUS ARRIVAL DETECTED =====");
-      print("DEBUG: Distance: ${distanceInMeters}m, ETA: ${estimatedTimeMinutes}min");
-      
       arrivalStatus = statusMessages['arrived']!;
-      isOnTime = true;
       print("DEBUG: Bus has arrived at destination");
 
-      // Stop tracking when bus arrives
-      print("DEBUG: Calling _stopTrackingOnArrival()...");
       _stopTrackingOnArrival();
-
-      // Show arrival notification
-      print("DEBUG: Calling _showArrivalNotification()...");
       _showArrivalNotification();
-      
-      print("DEBUG: ===== BUS ARRIVAL PROCESSING COMPLETE =====");
+      return;
     } else if (distanceInMeters < 500) {
       arrivalStatus = statusMessages['arriving']!;
-      isOnTime = true;
-      print("DEBUG: Bus is arriving at destination");
     } else if (distanceInMeters < 1000) {
       arrivalStatus = statusMessages['veryClose']!;
-      isOnTime = true;
-      print("DEBUG: Bus is very close to destination");
     } else {
       arrivalStatus = statusMessages['onTime']!;
-      isOnTime = true;
-      print("DEBUG: Bus is on time");
     }
 
     // Update the tracking state with new values
     if (mounted) {
-      // Get current persistent values
       final currentDistance = ref.read(persistentDistanceProvider);
       final currentETA = ref.read(persistentETAProvider);
 
-      print(
-          "DEBUG: Current distance: $currentDistance km, Current ETA: $currentETA minutes");
-      print(
-          "DEBUG: New distance: $distance km, New ETA: $estimatedTimeMinutes minutes");
-      print("DEBUG: Arrival status: $arrivalStatus");
-
-      // Update more frequently with smaller thresholds (50m for distance, 30 seconds for ETA)
+      // Update more frequently with smaller thresholds
       if ((currentDistance - distance).abs() > 0.05 ||
           (currentETA - estimatedTimeMinutes).abs() > 0.5) {
-        print("DEBUG: Updating tracking state with new values");
         ref.read(busTrackingProvider.notifier).updateBusTracking(
               selectedBus: ref.read(selectedBusStateProvider),
               selectedBusStop: selectedBusStop,
               distance: distance,
-              estimatedArrivalTime: estimatedTimeMinutes.toDouble(),
+              estimatedArrivalTime: estimatedTimeMinutes,
               isOnTime: isOnTime,
-              arrivalStatus: arrivalStatus, // Add arrival status
+              arrivalStatus: arrivalStatus,
             );
 
-        // Force UI update to ensure the BottomTrackingSheet refreshes
         setState(() {});
-        print(
-            "DEBUG: Updated tracking state with new values and forced UI refresh");
-      } else {
-        print("DEBUG: Values haven't changed significantly, skipping update");
       }
     }
   }
@@ -2944,7 +2913,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
     
     // Update distance and ETA calculations only if still actively tracking
     if (_isStreamActive) {
-      _updateDistanceAndETA(busData.coordinates, selectedBusStop);
+      _updateDistanceAndETA(busData.coordinates, selectedBusStop, busData: busData);
     }
     
     // Redraw polyline with updated bus position

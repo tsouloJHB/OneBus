@@ -4,8 +4,25 @@ import '../constants/app_constants.dart';
 import '../models/full_route.dart';
 
 class FullRouteService {
+  /// In-memory cache for full routes to avoid redundant network requests
+  static final Map<int, List<FullRoute>> _companyRoutesCache = {};
+  static final Map<int, List<FullRoute>> _routeIdCache = {};
+
+  /// Clear the in-memory cache
+  static void clearCache() {
+    _companyRoutesCache.clear();
+    _routeIdCache.clear();
+    print('[DEBUG] FullRouteService cache cleared');
+  }
+
   /// Fetch full routes by company ID
   static Future<List<FullRoute>> getFullRoutesByCompany(int companyId) async {
+    // Return from cache if available
+    if (_companyRoutesCache.containsKey(companyId)) {
+      print('[DEBUG] Returning ${_companyRoutesCache[companyId]!.length} full routes from cache for company $companyId');
+      return _companyRoutesCache[companyId]!;
+    }
+
     try {
       final url = Uri.parse('${AppConstants.apiBaseUrl}/full-routes?companyId=$companyId');
       print('[DEBUG] Fetching full routes for company $companyId from: $url');
@@ -17,6 +34,12 @@ class FullRouteService {
         final routes = jsonList
             .map((json) => FullRoute.fromJson(json as Map<String, dynamic>))
             .toList();
+        
+        // Store in cache for future use
+        if (routes.isNotEmpty) {
+          _companyRoutesCache[companyId] = routes;
+        }
+
         print('[DEBUG] Successfully loaded ${routes.length} full routes');
         return routes;
       } else {
@@ -32,6 +55,12 @@ class FullRouteService {
 
   /// Fetch full routes by route ID
   static Future<List<FullRoute>> getFullRoutesByRouteId(int routeId) async {
+    // Return from cache if available
+    if (_routeIdCache.containsKey(routeId)) {
+      print('[DEBUG] Returning ${_routeIdCache[routeId]!.length} full routes from cache for route $routeId');
+      return _routeIdCache[routeId]!;
+    }
+
     try {
       final url = Uri.parse('${AppConstants.apiBaseUrl}/full-routes?routeId=$routeId');
       print('[DEBUG] Fetching full routes for route $routeId from: $url');
@@ -43,6 +72,12 @@ class FullRouteService {
         final routes = jsonList
             .map((json) => FullRoute.fromJson(json as Map<String, dynamic>))
             .toList();
+        
+        // Store in cache for future use
+        if (routes.isNotEmpty) {
+          _routeIdCache[routeId] = routes;
+        }
+
         print('[DEBUG] Successfully loaded ${routes.length} full routes for route $routeId');
         return routes;
       } else {

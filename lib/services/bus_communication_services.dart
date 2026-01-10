@@ -150,6 +150,67 @@ class BusCommunicationServices {
     }
   }
 
+  /**
+   * Calculate accurate distance between bus and user along the actual route path.
+   * Uses linear referencing on the backend to snap GPS positions to the route
+   * and calculate distance along the polyline instead of straight-line distance.
+   * 
+   * @param busNumber Bus route number (e.g., "C5")
+   * @param direction Direction of travel (e.g., "Northbound", "Southbound")
+   * @param busLat Current bus latitude
+   * @param busLon Current bus longitude
+   * @param userLat User location latitude
+   * @param userLon User location longitude
+   * @return Map containing distanceMeters, distanceKm, estimatedTimeMinutes, and snap indices
+   */
+  static Future<Map<String, dynamic>?> calculateRouteDistance({
+    required String busNumber,
+    required String direction,
+    required double busLat,
+    required double busLon,
+    required double userLat,
+    required double userLon,
+  }) async {
+    try {
+      final url = '${AppConstants.apiBaseUrl}/tracking/distance';
+      print('[DEBUG] Calling route distance API: $url');
+      
+      final requestBody = {
+        'busNumber': busNumber,
+        'direction': direction,
+        'busLat': busLat,
+        'busLon': busLon,
+        'userLat': userLat,
+        'userLon': userLon,
+      };
+      
+      print('[DEBUG] Request body: $requestBody');
+      
+      final response = await HttpClient().postUrl(Uri.parse(url))
+        .then((request) {
+          request.headers.set('Content-Type', 'application/json');
+          request.write(json.encode(requestBody));
+          return request.close();
+        });
+      
+      final responseBody = await response.transform(utf8.decoder).join();
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(responseBody);
+        print('[DEBUG] Route distance calculated: ${data['distanceKm']} km, ETA: ${data['estimatedTimeMinutes']} min');
+        return data;
+      } else {
+        print('[ERROR] Failed to calculate route distance: ${response.statusCode}');
+        print('[ERROR] Response: $responseBody');
+        return null;
+      }
+    } catch (e) {
+      print('[ERROR] Exception calculating route distance: $e');
+      return null;
+    }
+  }
+
+
   Stream<BusLocationData> streamBusLocationLive({
     required String busNumber,
     required String busCompany,
@@ -213,6 +274,10 @@ class BusCommunicationServices {
                   ? (data['tripDirection'] ?? direction) : null,
               originalDirection: (data['tripDirection'] ?? direction).toLowerCase() != direction.toLowerCase() 
                   ? direction : null,
+              // Route-based distance and ETA from backend (linear referencing)
+              distanceMeters: data['distanceMeters']?.toDouble(),
+              distanceKm: data['distanceKm']?.toDouble(),
+              estimatedTimeMinutes: data['estimatedTimeMinutes']?.toDouble(),
             ),
           );
         } catch (e) {

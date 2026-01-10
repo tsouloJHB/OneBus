@@ -13,6 +13,11 @@
     final bool isFallback;
     final String? fallbackDirection;
     final String? originalDirection;
+    
+    // Route-based distance and ETA (calculated on backend using linear referencing)
+    final double? distanceMeters;
+    final double? distanceKm;
+    final double? estimatedTimeMinutes;
 
     BusLocationData({
       required this.busNumber,
@@ -25,6 +30,9 @@
       this.isFallback = false,
       this.fallbackDirection,
       this.originalDirection,
+      this.distanceMeters,
+      this.distanceKm,
+      this.estimatedTimeMinutes,
     });
 
     factory BusLocationData.fromJson(Map<String, dynamic> json) {
@@ -39,6 +47,9 @@
         isFallback: json['isFallback'] ?? false,
         fallbackDirection: json['fallbackDirection'],
         originalDirection: json['originalDirection'],
+        distanceMeters: json['distanceMeters']?.toDouble(),
+        distanceKm: json['distanceKm']?.toDouble(),
+        estimatedTimeMinutes: json['estimatedTimeMinutes']?.toDouble(),
       );
     }
 
@@ -55,6 +66,9 @@
         'isFallback': isFallback,
         'fallbackDirection': fallbackDirection,
         'originalDirection': originalDirection,
+        'distanceMeters': distanceMeters,
+        'distanceKm': distanceKm,
+        'estimatedTimeMinutes': estimatedTimeMinutes,
       };
     }
   }

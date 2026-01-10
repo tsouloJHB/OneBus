@@ -166,19 +166,60 @@ class BusTrackingController {
   }
 
   // Helper methods for distance and ETA calculations
-  double _calculateDistance(LatLng from, LatLng to) {
+  
+  /**
+   * Calculate distance and ETA using route-based linear referencing.
+   * This calls the backend API which snaps GPS positions to the actual route
+   * and calculates distance along the polyline for accuracy.
+   */
+  Future<Map<String, dynamic>?> _calculateRouteDistance(
+    LatLng busLocation,
+    LatLng userLocation,
+    String busNumber,
+    String direction,
+  ) async {
+    try {
+      final result = await BusCommunicationServices.calculateRouteDistance(
+        busNumber: busNumber,
+        direction: direction,
+        busLat: busLocation.latitude,
+        busLon: busLocation.longitude,
+        userLat: userLocation.latitude,
+        userLon: userLocation.longitude,
+      );
+      
+      return result;
+    } catch (e) {
+      print('[ERROR] Failed to calculate route distance: $e');
+      // Fallback to straight-line distance if API fails
+      return _calculateFallbackDistance(busLocation, userLocation);
+    }
+  }
+
+  /**
+   * DEPRECATED: Haversine formula for straight-line distance.
+   * Only used as a fallback if the route-based API fails.
+   * This does NOT account for the actual road path!
+   */
+  Map<String, dynamic> _calculateFallbackDistance(LatLng from, LatLng to) {
     final calculator = haversine.HaversineDistance();
-    return calculator.haversine(
+    final distanceKm = calculator.haversine(
       haversine.Location(from.latitude, from.longitude),
       haversine.Location(to.latitude, to.longitude),
       haversine.Unit.KM,
     );
-  }
 
-  double _calculateETA(double distance) {
     // Assuming average speed of 30 km/h
     const averageSpeedKmH = 30.0;
-    final estimatedTimeHours = distance / averageSpeedKmH;
-    return (estimatedTimeHours * 60); // Convert to minutes
+    final estimatedTimeHours = distanceKm / averageSpeedKmH;
+    final estimatedTimeMinutes = estimatedTimeHours * 60;
+
+    print('[WARN] Using fallback straight-line distance calculation: $distanceKm km');
+    
+    return {
+      'distanceKm': distanceKm,
+      'distanceMeters': distanceKm * 1000,
+      'estimatedTimeMinutes': estimatedTimeMinutes,
+    };
   }
 }
