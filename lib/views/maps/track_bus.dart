@@ -2524,7 +2524,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
   double _getZoomLevel(ScreenState screenState) {
     switch (screenState) {
       case ScreenState.tracking:
-        return 18.0; // Close zoom for detailed bus tracking
+        return 17.0; // Realistic zoom for detailed bus tracking
       case ScreenState.locationSelection:
         return 15.0; // Wider view for selecting bus stops
       case ScreenState.searchBus:
@@ -2899,7 +2899,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
                 markerId: busMarkerId,
                 position: busData.coordinates,
                 icon: rotatedIcon,
-                rotation: bearing,
+                rotation: 0, // Icon is already rotated, no need for additional rotation
                 infoWindow: InfoWindow(
                   title: 'Bus ${busData.busNumber}',
                   snippet: 'Speed: ${busData.speed.toStringAsFixed(1)} km/h',
@@ -2943,7 +2943,10 @@ class TrackBusState extends ConsumerState<TrackBus> {
     // Move camera to follow bus if enabled
     if (_isFollowingBus && _isStreamActive) {
       _mapController.animateCamera(
-        CameraUpdate.newLatLng(busData.coordinates),
+        CameraUpdate.newLatLngZoom(
+          busData.coordinates, 
+          _getZoomLevel(ScreenState.tracking)
+        ),
       );
     }
   }
@@ -3498,7 +3501,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
     final double lat2 = to.latitude * math.pi / 180.0;
     final double dLon = (to.longitude - from.longitude) * math.pi / 180.0;
 
-    final double y = math.sin(dLon) * math.sin(lat2);
+    // Correct bearing formula using cosine for latitude correction
+    final double y = math.sin(dLon) * math.cos(lat2);
     final double x = math.cos(lat1) * math.sin(lat2) -
         math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
 
