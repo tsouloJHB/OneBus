@@ -296,7 +296,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: ListTile(
           leading: FaIcon(
             icon,
-            color: const Color.fromARGB(255, 6, 6, 6),
+            color: Colors.red[900],
             size: 30,
           ),
           title: Center(

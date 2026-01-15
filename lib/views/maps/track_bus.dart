@@ -2519,6 +2519,226 @@ class TrackBusState extends ConsumerState<TrackBus> {
     await _loadBusStopsAndMarkers(filterDirection: selectedDirection);
 
     print("DEBUG: Bus selection complete - ready for bus stop selection");
+
+    // Smart check: if user is already at a stop, suggest it
+    await _checkForNearbyStopAndSuggest();
+  }
+
+  Future<void> _checkForNearbyStopAndSuggest() async {
+    print("DEBUG: Checking for nearby bus stops for quick assignment");
+    
+    // If location is missing, try to fetch it one last time
+    if (_currentLocation == null) {
+      print("DEBUG: User location not available for proximity check, attempting to fetch...");
+      try {
+        final locationData = await _location.getLocation();
+        if (mounted) {
+          setState(() {
+            _currentLocation = LatLng(locationData.latitude!, locationData.longitude!);
+            _updateUserLocationMarker(_currentLocation!);
+          });
+          // Move camera to the user's location since we just found it
+          _mapController.animateCamera(CameraUpdate.newLatLng(_currentLocation!));
+        }
+        print("DEBUG: Fetched user location: $_currentLocation");
+      } catch (e) {
+        print("DEBUG: Failed to fetch user location: $e");
+        return;
+      }
+    }
+    
+    if (_currentLocation == null) {
+      print("DEBUG: User location still not available after fetch attempt");
+      return;
+    }
+    
+    if (_busStops.isEmpty) {
+      print("DEBUG: No bus stops available for proximity check");
+      return;
+    }
+
+    // Find the nearest bus stop
+    BusStop? nearestStop;
+    double minDistance = double.infinity;
+
+    for (var stop in _busStops) {
+      double distance = _calculateDistance(_currentLocation!, stop.coordinates);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestStop = stop;
+      }
+    }
+
+    print("DEBUG: Nearest stop: ${nearestStop?.address ?? 'unknown'} at ${minDistance.toStringAsFixed(4)} km");
+    print("TEST-LOG: Closest bus stop: ${nearestStop?.address ?? 'unknown'} (${nearestStop?.direction ?? 'unknown'}) - Distance: ${minDistance.toStringAsFixed(4)} km");
+
+    // Check if within 50 meters (0.05 km) to be more forgiving
+    if (nearestStop != null && minDistance <= 0.05) {
+      print("DEBUG: User is within 30m of a bus stop, showing confirmation dialog");
+      if (!mounted) return;
+      // Use a post-frame callback to show dialog to avoid widget build conflicts
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showSmartStopSelectionDialog(nearestStop!);
+      });
+    }
+  }
+
+  void _showSmartStopSelectionDialog(BusStop busStop) {
+    if (_isDialogVisible) return;
+    
+    setState(() {
+      _isDialogVisible = true;
+    });
+
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 10,
+                offset: Offset(0, -2),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.my_location, color: Colors.blue),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Bus Stop Detected",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          "You seem to be near this stop",
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      busStop.address ?? "Unknown Address",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (busStop.direction != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        busStop.direction!,
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        setState(() {
+                          _isDialogVisible = false;
+                        });
+                        // Do nothing, let user select manually
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text("Select Manually"),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        setState(() {
+                          _isDialogVisible = false;
+                        });
+                        _handleBusStopSelection(busStop);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text("Track Here"),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10), // Bottom padding for safety
+            ],
+          ),
+        );
+      },
+    ).then((_) {
+      if (mounted) {
+        setState(() {
+          _isDialogVisible = false;
+        });
+      }
+    });
   }
 
   double _getZoomLevel(ScreenState screenState) {
