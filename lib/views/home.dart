@@ -5,14 +5,16 @@ import 'package:onebus/state/track_bus_state.dart';
 import 'package:onebus/state/screen_state.dart';
 import 'addRoute.dart';
 import 'select_provider.dart';
-import 'trip_history_screen.dart';
+import 'track_history_screen.dart';
 import 'payment_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
+import 'auth/login.dart';
 import 'maps/track_bus.dart';
 import 'maps/track_by_location.dart';
 import 'package:onebus/controllers/bus_controller.dart';
 import 'package:onebus/controllers/bus_tracking_controller.dart';
+import 'package:onebus/services/auth_service.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -21,8 +23,17 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  static bool _hasAnimated = false; // Flag to ensure it only animates once per session
+
+  final _authService = AuthService();
+  String _userName = '';
+  String _greeting = '';
+  late ScrollController _scrollController;
+  double _scrollOffset = 0.0;
 
     void _onItemTapped(int index) {
     setState(() {
@@ -55,11 +66,68 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
 
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
+    );
+
+    if (!_hasAnimated) {
+      _animationController.forward();
+      _hasAnimated = true;
+    } else {
+      _animationController.value = 1.0;
+    }
+
+    _setGreeting();
+    _loadUserData();
+
+    _scrollController = ScrollController()
+      ..addListener(() {
+        if (mounted) {
+          setState(() {
+            _scrollOffset = _scrollController.offset;
+          });
+        }
+      });
+
     // Clear all tracking state when returning to home
     WidgetsBinding.instance.addPostFrameCallback((_) {
       print("DEBUG: Home screen initialized - clearing tracking state");
       BusTrackingController(ref).clearAllTrackingState();
     });
+  }
+
+  void _setGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      _greeting = 'Good morning';
+    } else if (hour < 17) {
+      _greeting = 'Good afternoon';
+    } else {
+      _greeting = 'Good evening';
+    }
+  }
+
+  Future<void> _loadUserData() async {
+    final userData = await _authService.getUserData();
+    if (userData != null && userData['fullName'] != null) {
+      if (mounted) {
+        setState(() {
+          _userName = userData['fullName'];
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -69,9 +137,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     String busCompany = busController.getBusCompany();
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
@@ -81,6 +151,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
         child: SingleChildScrollView(
+          controller: _scrollController,
           child: Column(
             children: [
               Padding(
@@ -111,39 +182,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ],
                         ),
 
-                        // Bell icon aligned with the top of the text
+                        // Logout icon aligned with the top of the text
                         Align(
                           alignment: Alignment.topCenter,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.grey[300],
-                            ),
-                            padding: EdgeInsets.all(10.0),
-                            child: Icon(
-                              Icons.notifications,
-                              size: 30.0,
-                              color: Colors.grey[600],
+                          child: GestureDetector(
+                            onTap: () async {
+                              await _authService.logout();
+                              if (mounted) {
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(builder: (context) => LoginPage()),
+                                  (route) => false,
+                                );
+                              }
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.all(10.0),
+                              child: FaIcon(
+                                FontAwesomeIcons.signOut,
+                                size: 30.0,
+                                color: Colors.red,
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const Row(children: [
-                      Text('Good morning',
-                          style: TextStyle(
+                    Row(children: [
+                      Text('$_greeting',
+                          style: const TextStyle(
                             fontSize: 20.0,
                             fontWeight: FontWeight.bold,
                           )),
                     ]),
-                    const Row(children: [
-                      Text('Junior',
-                          style: TextStyle(
+                    Row(children: [
+                      Text(_userName.isNotEmpty ? _userName : 'User',
+                          style: const TextStyle(
                             fontSize: 20.0,
                             color: Colors.red,
                           )),
                     ]),
-                    Image.asset('assets/busCity4.png'),
+                    Transform.translate(
+                      offset: Offset(0, _scrollOffset * 0.3),
+                      child: Image.asset('assets/busCity4.png'),
+                    ),
                     SizedBox(height: 40),
                     // Location search input
                     Container(
@@ -228,12 +309,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                                 _buildTile(
                       FontAwesomeIcons.clockRotateLeft,
-                      text: 'Trip History',
+                      text: 'Track History',
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (context) => const TripHistoryScreen()),
+                              builder: (context) => const TrackHistoryScreen()),
                         );
                       },
                     ),
@@ -259,6 +340,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
+    ),
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: Colors.white, // Set the background color to white
         items: <BottomNavigationBarItem>[

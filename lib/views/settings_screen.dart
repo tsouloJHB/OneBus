@@ -141,21 +141,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   _buildSettingsTile(
-                    'Biometric Login',
-                    'Use fingerprint or face ID',
-                    FontAwesomeIcons.fingerprint,
-                    Colors.teal,
-                    trailing: Switch(
-                      value: _biometricEnabled,
-                      onChanged: (value) {
-                        setState(() {
-                          _biometricEnabled = value;
-                        });
-                      },
-                      activeColor: Colors.green,
-                    ),
-                  ),
-                  _buildSettingsTile(
                     'Privacy Policy',
                     'Read our privacy policy',
                     FontAwesomeIcons.shieldAlt,
@@ -173,86 +158,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               SizedBox(height: 30),
 
-              // Display & Language Section
-              _buildSection(
-                'Display & Language',
-                [
-                  _buildSettingsTile(
-                    'Language',
-                    _selectedLanguage,
-                    FontAwesomeIcons.language,
-                    Colors.indigo,
-                    onTap: () => _showLanguageDialog(),
-                  ),
-                  _buildSettingsTile(
-                    'Currency',
-                    _selectedCurrency,
-                    FontAwesomeIcons.moneyBill,
-                    Colors.green,
-                    onTap: () => _showCurrencyDialog(),
-                  ),
-                  _buildSettingsTile(
-                    'Auto Refresh',
-                    'Auto refresh bus locations',
-                    FontAwesomeIcons.sync,
-                    Colors.orange,
-                    trailing: Switch(
-                      value: _autoRefreshEnabled,
-                      onChanged: (value) {
-                        setState(() {
-                          _autoRefreshEnabled = value;
-                        });
-                      },
-                      activeColor: Colors.green,
-                    ),
-                  ),
-                  _buildSettingsTile(
-                    'Map Style',
-                    'Choose map appearance',
-                    FontAwesomeIcons.map,
-                    Colors.red,
-                    onTap: () => _showMapStyleDialog(),
-                  ),
-                ],
-              ),
-              SizedBox(height: 30),
-
-              // Data & Storage Section
-              _buildSection(
-                'Data & Storage',
-                [
-                  _buildSettingsTile(
-                    'Clear Cache',
-                    'Free up storage space',
-                    FontAwesomeIcons.trash,
-                    Colors.red,
-                    onTap: () => _showClearCacheDialog(),
-                  ),
-                  _buildSettingsTile(
-                    'Export Data',
-                    'Download your data',
-                    FontAwesomeIcons.download,
-                    Colors.purple,
-                    onTap: () => _showExportData(),
-                  ),
-                  _buildSettingsTile(
-                    'Data Usage',
-                    'Manage data consumption',
-                    FontAwesomeIcons.chartBar,
-                    Colors.blue,
-                    onTap: () => _showDataUsage(),
-                  ),
-                  _buildSettingsTile(
-                    'Offline Mode',
-                    'Use app without internet',
-                    FontAwesomeIcons.wifi,
-                    Colors.grey,
-                    onTap: () => _showOfflineMode(),
-                  ),
-                ],
-              ),
-              SizedBox(height: 30),
-
               // Support & Help Section
               _buildSection(
                 'Support & Help',
@@ -263,13 +168,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     FontAwesomeIcons.questionCircle,
                     Colors.blue,
                     onTap: () => _showHelpCenter(),
-                  ),
-                  _buildSettingsTile(
-                    'Contact Support',
-                    'Chat with our support team',
-                    FontAwesomeIcons.headset,
-                    Colors.green,
-                    onTap: () => _showContactSupport(),
                   ),
                   _buildSettingsTile(
                     'Report an Issue',
@@ -299,13 +197,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     FontAwesomeIcons.infoCircle,
                     Colors.grey,
                     onTap: () => _showAboutApp(),
-                  ),
-                  _buildSettingsTile(
-                    'What\'s New',
-                    'Latest updates and features',
-                    FontAwesomeIcons.star,
-                    Colors.amber,
-                    onTap: () => _showWhatsNew(),
                   ),
                   _buildSettingsTile(
                     'Rate App',

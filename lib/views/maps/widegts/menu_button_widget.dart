@@ -51,24 +51,6 @@ class MenuButtonWidget extends StatelessWidget {
             ),
           ),
         ),
-        // Location Icon on the far right
-        Positioned(
-          top: 32,
-          right: 16,
-          child: Material(
-            shape: const CircleBorder(),
-            color: Colors.white,
-            child: IconButton(
-              icon: const Icon(
-                FontAwesomeIcons.locationArrow,
-                color: Colors.black,
-              ),
-              onPressed: () {
-                // Implement your location button action here
-              },
-            ),
-          ),
-        ),
       ],
     );
   }

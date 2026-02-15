@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-class TripHistoryScreen extends StatelessWidget {
-  const TripHistoryScreen({Key? key}) : super(key: key);
+class TrackHistoryScreen extends StatelessWidget {
+  const TrackHistoryScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Trip History',
+          'Track History',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.red,
@@ -41,7 +41,7 @@ class TripHistoryScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'No trip history available',
+              'No track history available',
               style: TextStyle(
                 fontSize: 18,
                 color: Colors.grey[600],

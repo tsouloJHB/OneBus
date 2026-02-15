@@ -14,12 +14,12 @@ class BusRouteService {
   /// Fetch list of provider companies from server
   /// Expects backend endpoint `/api/companies` returning a JSON array of objects with `name` and optional `image`.
   static Future<List<Map<String, String>>> getProviders() async {
-    try {
+    return _retry(() async {
       final url = '$apiBaseUrl/companies';
       print('[DEBUG] Fetching providers from: $url');
       final response = await http
           .get(Uri.parse(url), headers: {'accept': 'application/json'})
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonData = json.decode(response.body);
@@ -38,31 +38,26 @@ class BusRouteService {
         print('[WARN] Failed to fetch providers: ${response.statusCode}');
         return [];
       }
-    } catch (e) {
-      print('[ERROR] Exception while fetching providers: $e');
-      return [];
-    }
+    });
   }
 
   /// Fetch only active bus companies from backend endpoint `/api/bus-companies/active`.
   /// Returns a list of maps with keys: `id`, `name`, `image`, `height`, `width`.
   /// Uses backend image URL when provided; falls back to a local placeholder.
   static Future<List<Map<String, String>>> getBusCompanies() async {
-    try {
+    return _retry(() async {
       final url = '$apiBaseUrl/bus-companies/active';
       print('[DEBUG] Fetching bus companies from: $url');
       final response = await http
           .get(Uri.parse(url), headers: {'accept': 'application/json'})
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonData = json.decode(response.body);
         final companies = jsonData.map<Map<String, String>>((item) {
-          // Backend returns imageUrl as relative path; prepend base URL for full HTTP URL
           var imageUrl = (item['imageUrl'] ?? (item['image'] ?? '')).toString();
           final fallbackImage = 'assets/images/driverprovider.png';
           
-          // If imageUrl is relative (starts with /), prepend the base URL
           if (imageUrl.isNotEmpty && !imageUrl.startsWith('http')) {
             imageUrl = '$baseUrl$imageUrl';
           }
@@ -82,23 +77,18 @@ class BusRouteService {
         print('[WARN] Failed to fetch bus companies: ${response.statusCode}');
         return [];
       }
-    } catch (e) {
-      print('[ERROR] Exception while fetching bus companies: $e');
-      return [];
-    }
+    });
   }
 
   /// Fetch bus routes for a specific company from the server
   static Future<List<BusRouteInfo>> getBusRoutesByCompany(
     String companyIdentifier) async {
-    try {
-    final encoded = Uri.encodeComponent(companyIdentifier);
-    // backend expects query param name `busCompanyId` (accepts name or id)
-    final url =
-      '$apiBaseUrl/bus-numbers/search/company?busCompanyId=$encoded';
+    return _retry(() async {
+      final encoded = Uri.encodeComponent(companyIdentifier);
+      final url = '$apiBaseUrl/bus-numbers/search/company?busCompanyId=$encoded';
 
-    print('[DEBUG] Fetching bus routes for company identifier: $companyIdentifier');
-    print('[DEBUG] URL: $url');
+      print('[DEBUG] Fetching bus routes for company identifier: $companyIdentifier');
+      print('[DEBUG] URL: $url');
 
       final response = await http.get(
         Uri.parse(url),
@@ -106,10 +96,7 @@ class BusRouteService {
           'accept': 'application/json',
           'Content-Type': 'application/json',
         },
-      ).timeout(const Duration(seconds: 10));
-
-      print('[DEBUG] Response status code: ${response.statusCode}');
-      print('[DEBUG] Response body: ${response.body}');
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonData = json.decode(response.body);
@@ -121,15 +108,10 @@ class BusRouteService {
         print('[DEBUG] Successfully fetched ${busRoutes.length} bus routes');
         return busRoutes;
       } else {
-        print(
-            '[ERROR] Failed to fetch bus routes. Status code: ${response.statusCode}');
-        print('[ERROR] Response body: ${response.body}');
+        print('[ERROR] Failed to fetch bus routes. Status code: ${response.statusCode}');
         return [];
       }
-    } catch (e) {
-      print('[ERROR] Exception while fetching bus routes: $e');
-      return [];
-    }
+    });
   }
 
   /// Get just the bus numbers as a list of strings
@@ -146,13 +128,12 @@ class BusRouteService {
   /// Fetch bus routes and stops for a specific bus number and company
   static Future<BusRouteResponse?> getBusRoutesAndStops(
       String busNumber, String companyName) async {
-    try {
+    return _retry(() async {
       final encodedBusNumber = Uri.encodeComponent(busNumber);
       final encodedCompanyName = Uri.encodeComponent(companyName);
       final url = '$apiBaseUrl/routes/$encodedBusNumber/$encodedCompanyName';
 
-      print(
-          '[DEBUG] Fetching bus routes and stops for bus: $busNumber, company: $companyName');
+      print('[DEBUG] Fetching bus routes and stops for bus: $busNumber, company: $companyName');
       print('[DEBUG] URL: $url');
 
       final response = await http.get(
@@ -161,38 +142,26 @@ class BusRouteService {
           'accept': 'application/json',
           'Content-Type': 'application/json',
         },
-      ).timeout(const Duration(seconds: 10));
-
-      print('[DEBUG] Response status code: ${response.statusCode}');
-      print('[DEBUG] Response body: ${response.body}');
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final jsonData = json.decode(response.body);
         final busRouteResponse = BusRouteResponse.fromJson(jsonData);
 
         print('[DEBUG] Successfully fetched bus routes and stops');
-        print('[DEBUG] Total routes: ${busRouteResponse.totalRoutes}');
-        print(
-            '[DEBUG] Total stops: ${busRouteResponse.routes.fold(0, (sum, route) => sum + route.stops.length)}');
-
         return busRouteResponse;
       } else {
-        print(
-            '[ERROR] Failed to fetch bus routes and stops. Status code: ${response.statusCode}');
-        print('[ERROR] Response body: ${response.body}');
+        print('[ERROR] Failed to fetch bus routes and stops. Status code: ${response.statusCode}');
         return null;
       }
-    } catch (e) {
-      print('[ERROR] Exception while fetching bus routes and stops: $e');
-      return null;
-    }
+    });
   }
 
   /// Fetch route directions for a specific bus number and company
   /// Returns route data with directions info for user to choose from
   static Future<Map<String, dynamic>?> getRouteDirections(
       String busNumber, String companyName) async {
-    try {
+    return _retry(() async {
       final encodedBusNumber = Uri.encodeComponent(busNumber);
       final encodedCompanyName = Uri.encodeComponent(companyName);
       final url = '$apiBaseUrl/routes/$encodedBusNumber/$encodedCompanyName';
@@ -206,10 +175,7 @@ class BusRouteService {
           'accept': 'application/json',
           'Content-Type': 'application/json',
         },
-      ).timeout(const Duration(seconds: 10));
-
-      print('[DEBUG] Response status code: ${response.statusCode}');
-      print('[DEBUG] Response body: ${response.body}');
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final jsonData = json.decode(response.body);
@@ -217,13 +183,9 @@ class BusRouteService {
         return jsonData;
       } else {
         print('[ERROR] Failed to fetch route directions. Status code: ${response.statusCode}');
-        print('[ERROR] Response body: ${response.body}');
         return null;
       }
-    } catch (e) {
-      print('[ERROR] Exception while fetching route directions: $e');
-      return null;
-    }
+    });
   }
 
   /// Convert API bus stop data to app's BusStop model
@@ -241,5 +203,24 @@ class BusRouteService {
               },
             ))
         .toList();
+  }
+
+  /// Helper method to retry a network call with backoff
+  static Future<T> _retry<T>(Future<T> Function() call, {int maxAttempts = 2}) async {
+    int attempts = 0;
+    while (true) {
+      try {
+        attempts++;
+        return await call();
+      } catch (e) {
+        if (attempts >= maxAttempts) {
+          print('[ERROR] Max retry attempts reached ($maxAttempts). Error: $e');
+          rethrow;
+        }
+        print('[WARN] Network attempt $attempts failed, retrying... Error: $e');
+        // Wait a bit before retrying (1s, 2s, etc.)
+        await Future.delayed(Duration(seconds: attempts));
+      }
+    }
   }
 }

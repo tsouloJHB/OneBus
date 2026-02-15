@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:onebus/services/auth_service.dart';
+import 'package:onebus/views/auth/login.dart';
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -7,22 +9,37 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _notificationsEnabled = true;
-  bool _locationEnabled = true;
-  bool _darkModeEnabled = false;
-  bool _biometricEnabled = false;
+  final _authService = AuthService();
+  String _userName = '';
+  String _userEmail = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final userData = await _authService.getUserData();
+    if (userData != null) {
+      setState(() {
+        _userName = userData['fullName'] ?? 'User';
+        _userEmail = userData['email'] ?? '';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
         backgroundColor: Colors.red,
         elevation: 0,
-        title: Text(
+        title: const Text(
           'Profile',
           style: TextStyle(
             color: Colors.white,
@@ -31,14 +48,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.edit, color: Colors.white),
-            onPressed: () {
-              _showEditProfileDialog();
-            },
-          ),
-        ],
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -52,32 +61,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Profile Header
               _buildProfileHeader(),
-              SizedBox(height: 30),
+              const SizedBox(height: 30),
 
               // Quick Stats
               _buildQuickStats(),
-              SizedBox(height: 30),
+              const SizedBox(height: 30),
 
               // Personal Information Section
               _buildPersonalInfoSection(),
-              SizedBox(height: 30),
-
-              // Payment & Cards Section
-              _buildPaymentSection(),
-              SizedBox(height: 30),
-
-              // Subscriptions Section
-              _buildSubscriptionsSection(),
-              SizedBox(height: 30),
+              const SizedBox(height: 30),
 
               // Account Actions
               _buildAccountActions(),
+              const SizedBox(height: 50),
             ],
           ),
         ),
@@ -87,7 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildProfileHeader() {
     return Container(
-      padding: EdgeInsets.all(24),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -96,7 +98,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             color: Colors.grey.withOpacity(0.3),
             spreadRadius: 1,
             blurRadius: 3,
-            offset: Offset(1, 1),
+            offset: const Offset(1, 1),
           ),
         ],
       ),
@@ -128,44 +130,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // User Name
           Text(
-            'Junior Smith',
-            style: TextStyle(
+            _userName.isNotEmpty ? _userName : 'User',
+            style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
               color: Colors.black,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
 
           // User Email
           Text(
-            'junior.smith@email.com',
+            _userEmail.isNotEmpty ? _userEmail : 'Email not available',
             style: TextStyle(
               fontSize: 16,
               color: Colors.grey[600],
-            ),
-          ),
-          SizedBox(height: 12),
-
-          // Member Since
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.green, width: 1),
-            ),
-            child: Text(
-              'Member since January 2024',
-              style: TextStyle(
-                color: Colors.green,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
             ),
           ),
         ],
@@ -178,26 +161,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         Expanded(
           child: _buildStatCard(
-            'Total Rides',
-            '127',
+            'Total Tracking',
+            '0',
             FontAwesomeIcons.bus,
             Colors.blue,
           ),
         ),
-        SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            'Total Spent',
-            'R 1,250',
-            FontAwesomeIcons.moneyBill,
-            Colors.green,
-          ),
-        ),
-        SizedBox(width: 16),
+        const SizedBox(width: 16),
         Expanded(
           child: _buildStatCard(
             'Saved Routes',
-            '8',
+            '0',
             FontAwesomeIcons.heart,
             Colors.red,
           ),
@@ -252,10 +226,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildPersonalInfoSection() {
+    String firstName = _userName.split(' ').first;
+    String lastName = _userName.contains(' ') ? _userName.substring(_userName.indexOf(' ') + 1) : '';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'Personal Information',
           style: TextStyle(
             fontSize: 20,
@@ -263,48 +240,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
             color: Colors.black,
           ),
         ),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         _buildSettingsTile(
-          'Full Name',
-          'Junior Smith',
+          'Name',
+          firstName,
           FontAwesomeIcons.user,
           Colors.blue,
-          onTap: () => _showEditNameDialog(),
+        ),
+        _buildSettingsTile(
+          'Surname',
+          lastName,
+          FontAwesomeIcons.user,
+          Colors.blue,
         ),
         _buildSettingsTile(
           'Email Address',
-          'junior.smith@email.com',
+          _userEmail,
           FontAwesomeIcons.envelope,
           Colors.green,
-          onTap: () => _showEditEmailDialog(),
         ),
         _buildSettingsTile(
           'Phone Number',
           '+27 82 123 4567',
           FontAwesomeIcons.phone,
           Colors.orange,
-          onTap: () => _showEditPhoneDialog(),
-        ),
-        _buildSettingsTile(
-          'Date of Birth',
-          '15 March 1995',
-          FontAwesomeIcons.calendar,
-          Colors.purple,
-          onTap: () => _showEditBirthDateDialog(),
-        ),
-        _buildSettingsTile(
-          'Emergency Contact',
-          'Add emergency contact',
-          FontAwesomeIcons.heart,
-          Colors.red,
-          onTap: () => _showEmergencyContactDialog(),
-        ),
-        _buildSettingsTile(
-          'Address',
-          '123 Main Street, Johannesburg',
-          FontAwesomeIcons.home,
-          Colors.indigo,
-          onTap: () => _showEditAddressDialog(),
         ),
       ],
     );
@@ -465,7 +424,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'Account',
           style: TextStyle(
             fontSize: 20,
@@ -473,36 +432,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             color: Colors.black,
           ),
         ),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         _buildSettingsTile(
           'Change Password',
           'Update your password',
           FontAwesomeIcons.lock,
           Colors.blue,
-          onTap: () => _showChangePassword(),
         ),
-        _buildSettingsTile(
-          'Two-Factor Authentication',
-          'Add extra security',
-          FontAwesomeIcons.key,
-          Colors.green,
-          onTap: () => _showTwoFactorAuth(),
-        ),
-        _buildSettingsTile(
-          'Export Data',
-          'Download your data',
-          FontAwesomeIcons.download,
-          Colors.purple,
-          onTap: () => _showExportData(),
-        ),
-        _buildSettingsTile(
-          'Delete Account',
-          'Permanently delete account',
-          FontAwesomeIcons.trash,
-          Colors.red,
-          onTap: () => _showDeleteAccount(),
-        ),
-        SizedBox(height: 20),
+        const SizedBox(height: 20),
         Container(
           width: double.infinity,
           decoration: BoxDecoration(
@@ -511,12 +448,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             border: Border.all(color: Colors.red, width: 3),
           ),
           child: ListTile(
-            leading: FaIcon(
-              FontAwesomeIcons.signOutAlt,
+            leading: const FaIcon(
+              FontAwesomeIcons.signOut,
               color: Colors.red,
               size: 24,
             ),
-            title: Center(
+            title: const Center(
               child: Text(
                 'Sign Out',
                 style: TextStyle(
@@ -526,7 +463,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-            onTap: () => _showSignOutDialog(),
+            onTap: () async {
+              await _authService.logout();
+              if (mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => LoginPage()),
+                  (route) => false,
+                );
+              }
+            },
           ),
         ),
       ],
@@ -874,12 +819,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
+                // Call auth service to logout
+                final authService = AuthService();
+                await authService.logout();
+                
+                // Close dialog first
                 Navigator.of(context).pop();
-                // Navigate to login screen
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/login',
+                
+                // Navigate to login screen and clear all routes
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => LoginPage()),
                   (route) => false,
                 );
               },

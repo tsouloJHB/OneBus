@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'models/BusInfo.dart';
 import 'state/bus_info_state.dart';
+import 'package:onebus/services/auth_service.dart';
+import 'package:onebus/views/select_provider.dart';
 import 'firebase_options.dart';
 import 'views/auth/login.dart';
 import 'services/bus_communication_services.dart';
@@ -81,8 +83,32 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      //home: SplashScreen(),
-      home: LoginPage(), // Set SplashScreen as the home screen
+      debugShowCheckedModeBanner: false,
+      title: 'OneBus',
+      theme: ThemeData(
+        primarySwatch: Colors.red,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
+      home: FutureBuilder<bool>(
+        future: AuthService().isLoggedIn(),
+        builder: (context, snapshot) {
+          // While waiting for the session check
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(color: Colors.red),
+              ),
+            );
+          }
+          
+          // If logged in, go to provider selection, else go to login
+          if (snapshot.data == true) {
+            return const SelectProviderScreen();
+          } else {
+            return LoginPage();
+          }
+        },
+      ),
     );
   }
 }

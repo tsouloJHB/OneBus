@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -138,6 +139,7 @@ class TrackBusState extends ConsumerState<TrackBus> {
   bool _isFallbackBus = false;
   String? _fallbackOriginalDirection;
   String? _fallbackActualDirection;
+  final ValueNotifier<double> _sheetExtent = ValueNotifier<double>(0.4); // Initial estimate
 
   @override
   void initState() {
@@ -179,6 +181,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
           _showPreselectedRouteConfirmation();
         }
       }
+      
+      // Start location updates automatically
+      startLocation();
     });
   }
 
@@ -348,6 +353,25 @@ class TrackBusState extends ConsumerState<TrackBus> {
         }
       });
     });
+  }
+
+  void _reCenterUserLocation() {
+    if (_currentLocation != null && _mapController != null) {
+      final currentScreenState = ref.read(currentScreenStateProvider);
+      _mapController.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          _currentLocation!,
+          _getZoomLevel(currentScreenState),
+        ),
+      );
+      setState(() {
+        _isTrackingUserLocation = true;
+      });
+    } else {
+      // If location is not available yet, try to start it
+      print("DEBUG: _currentLocation is null, triggering startLocation()");
+      startLocation();
+    }
   }
 
   void _updateDistanceAndETA(LatLng busLocation, BusStop selectedBusStop, {BusLocationData? busData}) {
@@ -3599,37 +3623,49 @@ class TrackBusState extends ConsumerState<TrackBus> {
           if (currentScreenState == ScreenState.searchBus &&
               widget.currentScreen == 'track bus') ...[
             const MenuButtonWidget(),
-            BottomSearchSheet(
-              filteredBuses: _filteredBuses,
-              searchController: _searchController,
-              onSearchChanged: (String value) {
-                final searchText = value.toLowerCase();
-                setState(() {
-                  if (searchText.isEmpty) {
-                    _filteredBuses = List.from(_allBuses);
-                  } else {
-                    _filteredBuses = _allBuses
-                        .where((bus) => bus.toLowerCase().contains(searchText))
-                        .toList();
-                  }
-                });
+            NotificationListener<DraggableScrollableNotification>(
+              onNotification: (notification) {
+                _sheetExtent.value = notification.extent;
+                return true;
               },
-              onSearchPressed: () {},
-              onBusSelected: onBusSelected,
+              child: BottomSearchSheet(
+                filteredBuses: _filteredBuses,
+                searchController: _searchController,
+                onSearchChanged: (String value) {
+                  final searchText = value.toLowerCase();
+                  setState(() {
+                    if (searchText.isEmpty) {
+                      _filteredBuses = List.from(_allBuses);
+                    } else {
+                      _filteredBuses = _allBuses
+                          .where((bus) => bus.toLowerCase().contains(searchText))
+                          .toList();
+                    }
+                  });
+                },
+                onSearchPressed: () {},
+                onBusSelected: onBusSelected,
+              ),
             ),
           ],
           if (widget.currentScreen == 'where to' && 
               currentScreenState == ScreenState.locationSelection &&
               selectedBus.isEmpty) ...[
             const MenuButtonWidget(),
-            LocationSearchBottomSheet(
-              onRouteSelected: _onLocationRouteSelected,
-              onClose: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const HomeScreen()),
-                );
+            NotificationListener<DraggableScrollableNotification>(
+              onNotification: (notification) {
+                _sheetExtent.value = notification.extent;
+                return true;
               },
+              child: LocationSearchBottomSheet(
+                onRouteSelected: _onLocationRouteSelected,
+                onClose: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const HomeScreen()),
+                  );
+                },
+              ),
             ),
           ],
           if (currentScreenState == ScreenState.locationSelection &&
@@ -3639,16 +3675,22 @@ class TrackBusState extends ConsumerState<TrackBus> {
               right: 0,
               bottom: 0,
               height: MediaQuery.of(context).size.height,
-              child: SelectionLocationSheet(
-                busStops: _busStops,
-                currentLocation: _currentLocation,
-                selectedBusStop: selectedBusStop,
-                selectedBus: selectedBus,
-                onConfirm: () {
-                  if (selectedBusStop != null) {
-                    startBusTracking(selectedBus, selectedBusStop);
-                  }
+              child: NotificationListener<DraggableScrollableNotification>(
+                onNotification: (notification) {
+                  _sheetExtent.value = notification.extent;
+                  return true;
                 },
+                child: SelectionLocationSheet(
+                  busStops: _busStops,
+                  currentLocation: _currentLocation,
+                  selectedBusStop: selectedBusStop,
+                  selectedBus: selectedBus,
+                  onConfirm: () {
+                    if (selectedBusStop != null) {
+                      startBusTracking(selectedBus, selectedBusStop);
+                    }
+                  },
+                ),
               ),
             ),
           ],
@@ -3660,16 +3702,22 @@ class TrackBusState extends ConsumerState<TrackBus> {
               right: 0,
               bottom: 0,
               height: MediaQuery.of(context).size.height,
-              child: SelectionLocationSheet(
-                busStops: _busStops,
-                currentLocation: _currentLocation,
-                selectedBusStop: selectedBusStop,
-                selectedBus: selectedBus,
-                onConfirm: () {
-                  if (selectedBusStop != null) {
-                    startBusTracking(selectedBus, selectedBusStop);
-                  }
+              child: NotificationListener<DraggableScrollableNotification>(
+                onNotification: (notification) {
+                  _sheetExtent.value = notification.extent;
+                  return true;
                 },
+                child: SelectionLocationSheet(
+                  busStops: _busStops,
+                  currentLocation: _currentLocation,
+                  selectedBusStop: selectedBusStop,
+                  selectedBus: selectedBus,
+                  onConfirm: () {
+                    if (selectedBusStop != null) {
+                      startBusTracking(selectedBus, selectedBusStop);
+                    }
+                  },
+                ),
               ),
             ),
           ],
@@ -3690,6 +3738,36 @@ class TrackBusState extends ConsumerState<TrackBus> {
               onStopTracking: _stopTracking,
             ),
           ],
+          // Re-center Location Button
+          if (currentScreenState != ScreenState.tracking)
+            ValueListenableBuilder<double>(
+              valueListenable: _sheetExtent,
+              builder: (context, extent, child) {
+                final screenHeight = MediaQuery.of(context).size.height;
+                final bottomPadding = (screenHeight * extent) + 32;
+                return Positioned(
+                  bottom: bottomPadding,
+                  right: 16,
+                  child: Material(
+                    elevation: 6,
+                    shape: const CircleBorder(),
+                    color: Colors.white,
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      child: IconButton(
+                        icon: const Icon(
+                          FontAwesomeIcons.locationArrow,
+                          color: Colors.black,
+                          size: 20,
+                        ),
+                        onPressed: _reCenterUserLocation,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
           // Loading overlay - replaces modal dialogs
           _buildLoadingOverlay(),
         ],

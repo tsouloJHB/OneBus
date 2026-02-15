@@ -12,7 +12,7 @@ class SelectProviderScreen extends ConsumerStatefulWidget {
   ConsumerState<SelectProviderScreen> createState() => _SelectProviderScreenState();
 }
 
-class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
+class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> with SingleTickerProviderStateMixin {
   // Local fallback providers
   final List<Map<String, String>> _fallbackProviders = [
     {
@@ -37,11 +37,22 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
 
   List<Map<String, String>> _providers = [];
   bool _loading = true;
+  late AnimationController _animationController;
 
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
     _loadProviders();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProviders() async {
@@ -58,6 +69,8 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
           _providers = serverProviders;
           _loading = false;
         });
+        // Start animation after data loads
+        _animationController.forward();
         return;
       }
       // If server returned empty list, try fallback
@@ -73,6 +86,9 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
       _providers = _fallbackProviders;
       _loading = false;
     });
+    
+    // Start animation after data loads
+    _animationController.forward();
     
     // Show notification that using offline data
     if (mounted) {
@@ -116,15 +132,20 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              Image.asset('assets/images/driverprovider.png',
-                  height: 200, width: 200),
-              Text(
-                'Choose a bus provider:',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
+              Column(
+                children: [
+                  SizedBox(height: 50),
+                  Image.asset('assets/images/driverprovider.png',
+                      height: 200, width: 200),
+                  Text(
+                    'Choose a bus provider:',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
               SizedBox(height: 20),
               Expanded(
@@ -140,60 +161,87 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
                             final imageWidth =
                               double.tryParse(provider['width'] ?? '') ?? 180.0;
 
-                          return Padding(
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 15.0),
-                            child: GestureDetector(
-                              onTap: () {
-                                final providerName = provider['name'] ?? '';
-                                final companyIdentifier = providerName;
+                          // Create staggered animation for each item
+                          final animation = Tween<double>(
+                            begin: 0.0,
+                            end: 1.0,
+                          ).animate(
+                            CurvedAnimation(
+                              parent: _animationController,
+                              curve: Interval(
+                                (index / _providers.length) * 0.5,
+                                ((index + 1) / _providers.length) * 0.5 + 0.5,
+                                curve: Curves.easeOut,
+                              ),
+                            ),
+                          );
 
-                                // Set the selected company in the state
-                                ref.read(selectedBusCompanyState.notifier).state = companyIdentifier;
-
-                                // Navigate to home screen
-                                Navigator.of(context).pushReplacement(
-                                  MaterialPageRoute(builder: (_) => const HomeScreen()),
-                                );
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.transparent,
-                                  border: Border.all(
-                                    color: Colors.red,
-                                    width: 2.0,
-                                  ),
-                                  borderRadius: BorderRadius.circular(20),
+                          return AnimatedBuilder(
+                            animation: animation,
+                            builder: (context, child) {
+                              return Opacity(
+                                opacity: animation.value,
+                                child: Transform.translate(
+                                  offset: Offset(0, 50 * (1 - animation.value)),
+                                  child: child,
                                 ),
-                                height: 120,
-                                width: double.infinity,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    (provider['image'] != null &&
-                                            provider['image']!.startsWith('http'))
-                                        ? SizedBox(
-                                            height: imageHeight,
-                                            width: imageWidth,
-                                            child: Image.network(
-                                              provider['image']!,
-                                              fit: BoxFit.contain,
-                                            ),
-                                          )
-                                        : Flexible(
-                                            child: Center(
-                                              child: Text(
-                                                provider['name'] ?? '',
-                                                style: const TextStyle(
-                                                  fontSize: 28,
-                                                  fontWeight: FontWeight.bold,
+                              );
+                            },
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 15.0),
+                              child: GestureDetector(
+                                onTap: () {
+                                  final providerName = provider['name'] ?? '';
+                                  final companyIdentifier = providerName;
+
+                                  // Set the selected company in the state
+                                  ref.read(selectedBusCompanyState.notifier).state = companyIdentifier;
+
+                                  // Navigate to home screen
+                                  Navigator.of(context).pushReplacement(
+                                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                                  );
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.transparent,
+                                    border: Border.all(
+                                      color: Colors.red,
+                                      width: 2.0,
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  height: 120,
+                                  width: double.infinity,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      (provider['image'] != null &&
+                                              provider['image']!.startsWith('http'))
+                                          ? SizedBox(
+                                              height: imageHeight,
+                                              width: imageWidth,
+                                              child: Image.network(
+                                                provider['image']!,
+                                                fit: BoxFit.contain,
+                                              ),
+                                            )
+                                          : Flexible(
+                                              child: Center(
+                                                child: Text(
+                                                  provider['name'] ?? '',
+                                                  style: const TextStyle(
+                                                    fontSize: 28,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
                                                 ),
-                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                          ),
-                                    const SizedBox(width: 20),       
-                                  ],
+                                      const SizedBox(width: 20),       
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),

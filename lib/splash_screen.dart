@@ -1,52 +1,64 @@
 import 'package:flutter/material.dart';
+import 'package:onebus/services/auth_service.dart';
+import 'package:onebus/views/auth/login.dart';
+import 'package:onebus/views/select_provider.dart';
 
-import 'views/home.dart';
-
-class SplashScreen extends StatelessWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    Future.delayed(const Duration(seconds: 2), () {
-      // Navigating to the home page
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  final _authService = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthAndNavigate();
+  }
+
+  Future<void> _checkAuthAndNavigate() async {
+    await Future.delayed(const Duration(seconds: 2));
+
+    final isLoggedIn = await _authService.isLoggedIn();
+
+    if (!mounted) return;
+
+    if (isLoggedIn) {
+      // User is logged in, navigate to provider selection/home
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(builder: (context) => const SelectProviderScreen()),
       );
-    });
+    } else {
+      // User is not logged in, navigate to login
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginPage()),
+      );
+    }
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-        body: Align(
-      alignment: const AlignmentDirectional(0, 0),
-      child: Column(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Align(
-            alignment: const AlignmentDirectional(-0.05, 0.05),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+      backgroundColor: Colors.white,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40.0),
               child: Image.asset(
-                'assets/bus.png',
-                width: MediaQuery.of(context).size.width * 0.12,
-                height: 40,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.asset(
-                'assets/images/redlogo.png',
-                width: 200,
+                'assets/redlogo.png',
                 fit: BoxFit.contain,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ));
+    );
   }
 }

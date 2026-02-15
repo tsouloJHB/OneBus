@@ -38,6 +38,7 @@ dependencies:
   google_maps_flutter: ^2.2.5
   location: ^7.0.1
   http: ^1.2.1
+  shared_preferences: ^2.2.2
   path_provider: ^2.0.15
   provider: ^6.0.5
   firebase_core: ^3.6.0
@@ -85,6 +86,7 @@ flutter:
   assets:
  
     - assets/logo.png
+    - assets/redlogo.png
     - assets/bus.png
     - assets/newBus.png
     - assets/busIcon.png
