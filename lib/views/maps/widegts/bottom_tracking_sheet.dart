@@ -409,6 +409,7 @@ class BottomTrackingSheet extends ConsumerWidget {
                                           size: 16,
                                         ),
                                       ),
+                                      
                                       const SizedBox(height: 8),
                                       Text(
                                         busTrackingState?.estimatedArrivalTime != null
@@ -471,6 +472,7 @@ class BottomTrackingSheet extends ConsumerWidget {
                                           size: 16,
                                         ),
                                       ),
+                                      
                                       const SizedBox(height: 8),
                                       Text(
                                         busTrackingState?.distance != null
@@ -518,7 +520,7 @@ class BottomTrackingSheet extends ConsumerWidget {
                                   ),
                                   child: ElevatedButton(
                                     onPressed: () {
-                                      // Clear all tracking state before stopping tracking
+                                      // Clear all tracking state before stopping tracking , 
                                       BusTrackingController(ref)
                                           .clearAllTrackingState();
                                       // Stop tracking and return to home

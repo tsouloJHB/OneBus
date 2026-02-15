@@ -152,7 +152,7 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
                                 ref.read(selectedBusCompanyState.notifier).state = companyIdentifier;
 
                                 // Navigate to home screen
-                                Navigator.of(context).push(
+                                Navigator.of(context).pushReplacement(
                                   MaterialPageRoute(builder: (_) => const HomeScreen()),
                                 );
                               },

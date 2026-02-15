@@ -4,23 +4,18 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/bus_route_info.dart';
 import '../models/bus_route_response.dart';
 import '../models/bus_stop.dart';
+import '../constants/app_constants.dart';
 
 class BusRouteService {
-  // For development: when the backend runs on the development machine and you
-  // use `adb reverse tcp:8080 tcp:8080`, the app on a physical Android device
-  // can reach the host via `http://localhost:8080`.
-  // If you run the app on an emulator, change this to `http://10.0.2.2:8080`.
-  // For production builds set this to your real backend URL.
-  // When running on the Android emulator, use 10.0.2.2 to reach the host's
-  // localhost. If you're running on a physical device with `adb reverse` set up
-  // use `http://localhost:8080` instead.
-  static const String baseUrl = 'http://10.0.2.2:8080';
+  // Points to the backend server URL from AppConstants
+  static const String baseUrl = AppConstants.rootUrl;
+  static const String apiBaseUrl = AppConstants.apiBaseUrl;
 
   /// Fetch list of provider companies from server
   /// Expects backend endpoint `/api/companies` returning a JSON array of objects with `name` and optional `image`.
   static Future<List<Map<String, String>>> getProviders() async {
     try {
-      final url = '$baseUrl/api/companies';
+      final url = '$apiBaseUrl/companies';
       print('[DEBUG] Fetching providers from: $url');
       final response = await http
           .get(Uri.parse(url), headers: {'accept': 'application/json'})
@@ -54,7 +49,7 @@ class BusRouteService {
   /// Uses backend image URL when provided; falls back to a local placeholder.
   static Future<List<Map<String, String>>> getBusCompanies() async {
     try {
-      final url = '$baseUrl/api/bus-companies/active';
+      final url = '$apiBaseUrl/bus-companies/active';
       print('[DEBUG] Fetching bus companies from: $url');
       final response = await http
           .get(Uri.parse(url), headers: {'accept': 'application/json'})
@@ -100,7 +95,7 @@ class BusRouteService {
     final encoded = Uri.encodeComponent(companyIdentifier);
     // backend expects query param name `busCompanyId` (accepts name or id)
     final url =
-      '$baseUrl/api/bus-numbers/search/company?busCompanyId=$encoded';
+      '$apiBaseUrl/bus-numbers/search/company?busCompanyId=$encoded';
 
     print('[DEBUG] Fetching bus routes for company identifier: $companyIdentifier');
     print('[DEBUG] URL: $url');
@@ -154,7 +149,7 @@ class BusRouteService {
     try {
       final encodedBusNumber = Uri.encodeComponent(busNumber);
       final encodedCompanyName = Uri.encodeComponent(companyName);
-      final url = '$baseUrl/api/routes/$encodedBusNumber/$encodedCompanyName';
+      final url = '$apiBaseUrl/routes/$encodedBusNumber/$encodedCompanyName';
 
       print(
           '[DEBUG] Fetching bus routes and stops for bus: $busNumber, company: $companyName');
@@ -200,7 +195,7 @@ class BusRouteService {
     try {
       final encodedBusNumber = Uri.encodeComponent(busNumber);
       final encodedCompanyName = Uri.encodeComponent(companyName);
-      final url = '$baseUrl/api/routes/$encodedBusNumber/$encodedCompanyName';
+      final url = '$apiBaseUrl/routes/$encodedBusNumber/$encodedCompanyName';
 
       print('[DEBUG] Fetching route directions for bus: $busNumber, company: $companyName');
       print('[DEBUG] URL: $url');

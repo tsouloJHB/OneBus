@@ -22,21 +22,56 @@ import 'package:onebus/views/home.dart';
 import 'package:geocoding/geocoding.dart' hide Location;
 import 'package:onebus/views/maps/widegts/bottom_search_sheet.dart';
 import 'package:onebus/views/maps/widegts/bottom_tracking_sheet.dart';
+import 'package:onebus/views/maps/widegts/location_search_bottom_sheet.dart';
 
 import 'package:onebus/views/maps/widegts/menu_button_widget.dart';
 import 'package:onebus/views/maps/widegts/search_location_overlay.dart';
 import 'package:onebus/views/maps/widegts/selection_location_sheet.dart';
 import 'package:onebus/models/bus_location_data.dart';
+import 'package:onebus/models/location_search_models.dart';
+import 'package:onebus/services/bus_route_service.dart' as route_service;
 import 'package:onebus/strategies/bus_company_strategy_factory.dart';
+import 'package:onebus/services/notification_service.dart';
 
 final selectedBusStateProvider = StateProvider<String>((ref) => '');
 final selectedDirectionProvider = StateProvider<String?>((ref) => null);
 final currentBusLocationProvider = StateProvider<LatLng?>((ref) => null);
 final lastUpdateTimeProvider = StateProvider<DateTime?>((ref) => null);
 
+/// Data class to hold pre-selected route information from "Where To" flow
+class PreselectedRouteData {
+  final int routeId;
+  final String routeName;
+  final String? direction;
+  final String companyName;
+  final int companyId;
+  final String? destinationAddress;
+  final double? destinationLat;
+  final double? destinationLng;
+
+  PreselectedRouteData({
+    required this.routeId,
+    required this.routeName,
+    this.direction,
+    required this.companyName,
+    required this.companyId,
+    this.destinationAddress,
+    this.destinationLat,
+    this.destinationLng,
+  });
+}
+
 class TrackBus extends ConsumerStatefulWidget {
   final String currentScreen;
-  const TrackBus({super.key, required this.currentScreen});
+  
+  /// Optional pre-selected route data from "Where To" flow
+  final PreselectedRouteData? preselectedRoute;
+  
+  const TrackBus({
+    super.key, 
+    required this.currentScreen,
+    this.preselectedRoute,
+  });
 
   @override
   ConsumerState<TrackBus> createState() => TrackBusState();
@@ -98,6 +133,8 @@ class TrackBusState extends ConsumerState<TrackBus> {
   bool _fallbackNotificationShown = false;
   
   // Track fallback bus state to ignore arrival detection during wrong direction travel
+  bool _approachingNotificationShown = false; // 1000m notification
+  bool _arrivedNotificationShown = false; // 100m notification
   bool _isFallbackBus = false;
   String? _fallbackOriginalDirection;
   String? _fallbackActualDirection;
@@ -111,6 +148,9 @@ class TrackBusState extends ConsumerState<TrackBus> {
     _initializeBuses();
     _searchController.addListener(_handleSearchChange);
     _loadBusIcon(); // Add explicit bus icon loading
+    
+    // Initialize notification service
+    _initializeNotifications();
 
     // Initialize screen state based on currentScreen parameter
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -132,6 +172,12 @@ class TrackBusState extends ConsumerState<TrackBus> {
             ScreenState.locationSelection;
         ref.read(locationScreenStateProvider.notifier).state = true;
         ref.read(locationScreenStepProvider.notifier).state = 1;
+        
+        // If we have pre-selected route data from "Where To" flow,
+        // show confirmation dialog after initialization
+        if (widget.preselectedRoute != null) {
+          _showPreselectedRouteConfirmation();
+        }
       }
     });
   }
@@ -157,6 +203,18 @@ class TrackBusState extends ConsumerState<TrackBus> {
           _filteredBuses = [];
         });
       }
+    }
+  }
+
+  /// Initialize notification service
+  Future<void> _initializeNotifications() async {
+    try {
+      await notificationService.initialize();
+      // Request permissions for iOS
+      await notificationService.requestPermissions();
+      print('[NOTIFICATION] Notification service initialized successfully');
+    } catch (e) {
+      print('[NOTIFICATION] Error initializing notifications: $e');
     }
   }
 
@@ -365,15 +423,41 @@ class TrackBusState extends ConsumerState<TrackBus> {
       arrivalStatus = statusMessages['arrived']!;
       print("DEBUG: Bus has arrived at destination");
 
+      // Show notification for bus arrival (100m)
+      if (!_arrivedNotificationShown) {
+        _arrivedNotificationShown = true;
+        final busNumber = ref.read(selectedBusStateProvider) ?? 'Unknown';
+        final busStop = ref.read(selectedBusStopProvider);
+        notificationService.showBusArrivedNotification(
+          busNumber: busNumber,
+          destination: busStop?.address ?? 'destination',
+        );
+      }
+
       _stopTrackingOnArrival();
       _showArrivalNotification();
       return;
-    } else if (distanceInMeters < 500) {
-      arrivalStatus = statusMessages['arriving']!;
-    } else if (distanceInMeters < 1000) {
-      arrivalStatus = statusMessages['veryClose']!;
     } else {
-      arrivalStatus = statusMessages['onTime']!;
+      // Show notification when bus is approaching (1000m)
+      if (!_approachingNotificationShown && distanceInMeters < 1000) {
+        _approachingNotificationShown = true;
+        final busNumber = ref.read(selectedBusStateProvider) ?? 'Unknown';
+        final busStop = ref.read(selectedBusStopProvider);
+        notificationService.showBusApproachingNotification(
+          busNumber: busNumber,
+          destination: busStop?.address ?? 'destination',
+          distanceMeters: distanceInMeters.toInt(),
+        );
+        print("[NOTIFICATION] Bus $busNumber approaching - $distanceInMeters meters away");
+      }
+
+      if (distanceInMeters < 500) {
+        arrivalStatus = statusMessages['arriving']!;
+      } else if (distanceInMeters < 1000) {
+        arrivalStatus = statusMessages['veryClose']!;
+      } else {
+        arrivalStatus = statusMessages['onTime']!;
+      }
     }
 
     // Update the tracking state with new values
@@ -433,9 +517,16 @@ class TrackBusState extends ConsumerState<TrackBus> {
         marker.markerId.value == 'requested_start_marker' ||
         marker.markerId == busMarkerId
       );
+      
+      // Reset notification flags
+      _approachingNotificationShown = false;
+      _arrivedNotificationShown = false;
     });
 
     _hideLoadingDialog();
+
+    // Cancel any pending notifications
+    await notificationService.cancelAllNotifications();
 
     // STEP 4: Clear tracking state
     ref.read(busTrackingProvider.notifier).clearAllTrackingState();
@@ -1531,6 +1622,264 @@ class TrackBusState extends ConsumerState<TrackBus> {
     }
   }
 
+  /// Show confirmation dialog when coming from "Where To" flow with pre-selected route data
+  void _showPreselectedRouteConfirmation() {
+    final routeData = widget.preselectedRoute;
+    if (routeData == null) return;
+    
+    if (_isDialogVisible) return;
+    setState(() {
+      _isDialogVisible = true;
+    });
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.directions_bus,
+                  color: Colors.red,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Start Bus Tracking?',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Would you like to track this bus to your destination?',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                
+                // Route info card
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.route, color: Colors.blue.shade600),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Route ${routeData.routeName}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              routeData.companyName,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                            if (routeData.direction != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.arrow_forward,
+                                      size: 14,
+                                      color: Colors.blue.shade700,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      routeData.direction!,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // Destination info card
+                if (routeData.destinationAddress != null)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.location_on, color: Colors.red.shade600),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Destination',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                routeData.destinationAddress!,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _isDialogVisible = false;
+                });
+                // Go back to home or previous screen
+                Navigator.pop(this.context);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _isDialogVisible = false;
+                });
+                // Proceed to bus stop selection
+                _proceedWithPreselectedRoute();
+              },
+              icon: const Icon(Icons.play_arrow, size: 18),
+              label: const Text('Yes, Start Tracking'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      setState(() {
+        _isDialogVisible = false;
+      });
+    });
+  }
+
+  /// Proceed with the pre-selected route - load bus stops and show selection
+  void _proceedWithPreselectedRoute() async {
+    final routeData = widget.preselectedRoute;
+    if (routeData == null) return;
+    
+    print("DEBUG: Proceeding with pre-selected route: ${routeData.routeName}");
+    
+    // Set the bus (route name is typically the bus number like "C5")
+    ref.read(selectedBusStateProvider.notifier).state = routeData.routeName;
+    
+    // Set the direction if provided
+    if (routeData.direction != null) {
+      ref.read(selectedDirectionProvider.notifier).state = routeData.direction;
+    }
+    
+    // Set the company via the bus controller
+    busController.setBusComapny(routeData.companyName);
+    
+    // Transition to bus stop selection state
+    ref.read(currentScreenStateProvider.notifier).state = ScreenState.locationSelection;
+    ref.read(locationScreenStepProvider.notifier).state = 2; // Move to bus stop selection step
+    
+    // Show loading and load bus stops for this route
+    _showLoadingDialog();
+    
+    try {
+      // Load bus stops for the selected route
+      await _loadBusStopsAndMarkers(
+        filterDirection: routeData.direction,
+      );
+      
+      _hideLoadingDialog();
+      
+      // Show the bottom sheet for bus stop selection
+      setState(() {
+        _showBottomSheet = true;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Select your bus stop for Route ${routeData.routeName}'),
+          backgroundColor: Colors.blue,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      _hideLoadingDialog();
+      print("ERROR: Failed to load bus stops: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load bus stops. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _showSimpleDirectionSelectionDialog(BusStop busStop, String selectedBus) {
     if (_isDialogVisible) return;
     setState(() {
@@ -1731,29 +2080,19 @@ class TrackBusState extends ConsumerState<TrackBus> {
     });
   }
 
-  // Enhanced method to create stop markers with direction-based colors and highlighting
+  // Enhanced method to create stop markers with consistent red color
   Marker _createStopMarker(BusStop busStop, {bool isHighlighted = false}) {
     final direction = busStop.direction ?? 'unknown';
     final index = _getDisplayIndex(busStop);
     
-    // Determine marker color based on highlight status and direction
+    // Use consistent red color for all bus stop markers
     BitmapDescriptor markerIcon;
     if (isHighlighted) {
-      markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow);
+      // Use a brighter red/orange for highlighted stops
+      markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
     } else {
-      switch (direction.toLowerCase()) {
-        case 'northbound':
-          markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue);
-          break;
-        case 'southbound':
-          markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
-          break;
-        case 'bidirectional':
-          markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
-          break;
-        default:
-          markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
-      }
+      // All stops use red for consistency
+      markerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
     }
 
     // Get the selected direction to show in the title
@@ -2154,6 +2493,379 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
   bool _hasCheckedProximity =
       false; // Add flag to track if we've checked proximity
+      
+  /// Handle route selection from location search in "Where To" mode
+  Future<void> _onLocationRouteSelected(RouteProximityResult route, String searchQuery) async {
+    print("[DEBUG] Location route selected: ${route.routeName} - ${route.direction ?? 'No direction'}");
+    print("[DEBUG] Route has ${route.nearbyStops.length} nearby stops from search");
+    print("[DEBUG] Original company name: '${route.companyName}'");
+    
+    // Map company name if it's empty or "Unknown"
+    String companyName = route.companyName;
+    if (companyName.isEmpty || companyName.toLowerCase() == 'unknown') {
+      // Check route name prefix to determine company
+      if (route.routeName.toLowerCase().startsWith('c')) {
+        companyName = 'Rea Vaya';
+        print("[DEBUG] Mapped company to: Rea Vaya (based on route prefix)");
+      } else {
+        // Default fallback
+        companyName = 'Rea Vaya';
+        print("[DEBUG] Using default company: Rea Vaya");
+      }
+    }
+    
+    // Extract bus number from route name (remove suffixes like -s, -n, etc.)
+    String busNumber = route.routeName;
+    // Remove common suffixes that indicate direction or variant
+    busNumber = busNumber.replaceAll(RegExp(r'-[sn]$', caseSensitive: false), '');
+    // Convert to uppercase for consistency (C5, F9, etc.)
+    busNumber = busNumber.toUpperCase();
+    print("[DEBUG] Extracted bus number: '$busNumber' from route name: '${route.routeName}'");
+    
+    // Show loading dialog while fetching stops
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text('Loading route stops...'),
+            ],
+          ),
+        );
+      },
+    );
+    
+    try {
+      // Fetch all stops for this route if not already populated
+      List<BusStop> stopsToShow = [];
+      
+      // Always fetch from API to get complete stop list
+      print("[DEBUG] Fetching all stops from API for bus: $busNumber, company: $companyName");
+      final busRouteResponse = await route_service.BusRouteService.getBusRoutesAndStops(
+        busNumber,
+        companyName,
+      );
+      
+      print("[DEBUG] API response: ${busRouteResponse != null ? 'received' : 'null'}");
+      if (busRouteResponse != null) {
+        print("[DEBUG] API returned ${busRouteResponse.routes.length} routes");
+      }
+      
+      if (busRouteResponse != null && busRouteResponse.routes.isNotEmpty) {
+        // Find matching route by direction if available
+        var matchedRoute = busRouteResponse.routes.first;
+        print("[DEBUG] First route direction: ${matchedRoute.direction}");
+        
+        if (route.direction != null) {
+          print("[DEBUG] Looking for direction match: ${route.direction}");
+          for (var r in busRouteResponse.routes) {
+            print("[DEBUG] Checking route direction: ${r.direction}");
+            if (r.direction.toLowerCase().contains(route.direction!.toLowerCase()) ||
+                route.direction!.toLowerCase().contains(r.direction.toLowerCase())) {
+              matchedRoute = r;
+              print("[DEBUG] Found matching direction: ${r.direction}");
+              break;
+            }
+          }
+        }
+        
+        print("[DEBUG] Matched route has ${matchedRoute.stops.length} stops");
+        stopsToShow = route_service.BusRouteService.convertApiStopsToBusStops(matchedRoute.stops);
+        print("[DEBUG] Converted to ${stopsToShow.length} BusStop objects");
+      } else {
+        print("[DEBUG] No routes returned from API, trying to use nearbyStops");
+        // Fallback to nearbyStops if available
+        if (route.nearbyStops.isNotEmpty) {
+          stopsToShow = route.nearbyStops.map((nearbyStop) {
+            return BusStop(
+              busStopIndex: nearbyStop.stopId,
+              address: nearbyStop.address,
+              coordinates: LatLng(nearbyStop.latitude, nearbyStop.longitude),
+            );
+          }).toList();
+          print("[DEBUG] Using ${stopsToShow.length} stops from nearbyStops");
+        }
+      }
+      
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+      
+      if (stopsToShow.isEmpty) {
+        print("[ERROR] No stops found after all attempts");
+        // Show error if no stops found
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No stops found for route $busNumber ($companyName)'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+      
+      // Update state with the selected route info (use original route name for display)
+      setState(() {
+        selectedBus = route.routeName;
+        _busStops = stopsToShow;
+      });
+      
+      // Update providers with corrected company name
+      ref.read(selectedBusStateProvider.notifier).state = route.routeName;
+      ref.read(selectedDirectionProvider.notifier).state = route.direction;
+      busController.setBusComapny(companyName);
+      
+      // Load marker icon and update all markers on the map
+      if (customMarkerIcon == null) {
+        await _createMarkerIcon();
+      }
+      
+      // Add bus stop markers to the map
+      _updateAllMarkers();
+      
+      // Show confirmation dialog before proceeding to stop selection
+      _showTrackingConfirmationDialog(route, stopsToShow, companyName, destination: searchQuery);
+      
+      print("[DEBUG] Loaded ${stopsToShow.length} stops, showing confirmation dialog");
+      
+    } catch (e) {
+      print("[ERROR] Failed to load route stops: $e");
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load route: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+  
+  /// Show confirmation dialog for tracking
+  void _showTrackingConfirmationDialog(RouteProximityResult route, List<BusStop> stops, String companyName, {String destination = ''}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.red.shade50,
+                  Colors.white,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  spreadRadius: 3,
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Title
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.directions_bus,
+                        color: Colors.red,
+                        size: 32,
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Ready to Track?',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  // Route info card
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.red.shade200,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        if (destination.isNotEmpty) ...[
+                          _buildInfoRow(
+                            Icons.location_on,
+                            'Destination',
+                            destination,
+                          ),
+                          const Divider(height: 16),
+                        ],
+                        _buildInfoRow(
+                          Icons.route,
+                          'Route',
+                          route.routeName,
+                        ),
+                        const Divider(height: 16),
+                        _buildInfoRow(
+                          Icons.business,
+                          'Company',
+                          companyName,
+                        ),
+                        if (route.direction != null) ...[
+                          const Divider(height: 16),
+                          _buildInfoRow(
+                            Icons.navigation,
+                            'Direction',
+                            route.direction!,
+                          ),
+                        ],
+                        const Divider(height: 16),
+                        _buildInfoRow(
+                          Icons.place,
+                          'Total Stops',
+                          '${stops.length} stops available',
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  const Text(
+                    'Would you like to select your destination stop and start tracking?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.black87,
+                      height: 1.4,
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Action buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop(); // Close dialog
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const HomeScreen(),
+                              ),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: const BorderSide(color: Colors.red, width: 2),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop(); // Close dialog
+                            // Transition to stop selection state
+                            ref.read(currentScreenStateProvider.notifier).state = 
+                                ScreenState.locationSelection;
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: Colors.red,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'Yes, Continue',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+  
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: Colors.red),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
   void onBusSelected(String busNumber) async {
     print("DEBUG: onBusSelected called with bus number: $busNumber");
 
@@ -2482,6 +3194,12 @@ class TrackBusState extends ConsumerState<TrackBus> {
 
   Future<void> _continueWithBusSelection(String busNumber, String? selectedDirection) async {
     print("DEBUG: Continuing with bus selection - Bus: $busNumber, Direction: $selectedDirection");
+
+    // Reset notification flags for new tracking session
+    setState(() {
+      _approachingNotificationShown = false;
+      _arrivedNotificationShown = false;
+    });
 
     setState(() {
       // Update the selected bus state using the new provider
@@ -2900,23 +3618,43 @@ class TrackBusState extends ConsumerState<TrackBus> {
               onBusSelected: onBusSelected,
             ),
           ],
-          if (widget.currentScreen == 'where to') ...[
-            SearchLocation(onClose: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const HomeScreen()),
-              );
-              _busTrackingController.setLocationScreenStep(1);
-            }),
-          ],
-          if (selectedBus.isEmpty && currentStep == 2) ...[
-            LocationTrackingConfirmView(
-              startLocation: '21 ondekers road',
-              destination: 'creasta bysernodia road',
+          if (widget.currentScreen == 'where to' && 
+              currentScreenState == ScreenState.locationSelection &&
+              selectedBus.isEmpty) ...[
+            const MenuButtonWidget(),
+            LocationSearchBottomSheet(
+              onRouteSelected: _onLocationRouteSelected,
+              onClose: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const HomeScreen()),
+                );
+              },
             ),
           ],
           if (currentScreenState == ScreenState.locationSelection &&
               widget.currentScreen == 'track bus') ...[
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: MediaQuery.of(context).size.height,
+              child: SelectionLocationSheet(
+                busStops: _busStops,
+                currentLocation: _currentLocation,
+                selectedBusStop: selectedBusStop,
+                selectedBus: selectedBus,
+                onConfirm: () {
+                  if (selectedBusStop != null) {
+                    startBusTracking(selectedBus, selectedBusStop);
+                  }
+                },
+              ),
+            ),
+          ],
+          if (currentScreenState == ScreenState.locationSelection &&
+              widget.currentScreen == 'where to' &&
+              selectedBus.isNotEmpty) ...[
             Positioned(
               left: 0,
               right: 0,

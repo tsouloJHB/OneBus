@@ -49,4 +49,8 @@
             <data android:mimeType="text/plain"/>
         </intent>
     </queries>
+    
+    <!-- Notification permissions -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 </manifest>

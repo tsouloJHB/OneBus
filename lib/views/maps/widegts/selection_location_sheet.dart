@@ -129,6 +129,22 @@ class _SelectionLocationSheetState
                 ),
               ),
 
+              // Back button
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
               // Title text
               const Row(
                 mainAxisAlignment: MainAxisAlignment.center,

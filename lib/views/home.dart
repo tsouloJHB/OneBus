@@ -4,6 +4,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:onebus/state/track_bus_state.dart';
 import 'package:onebus/state/screen_state.dart';
 import 'addRoute.dart';
+import 'select_provider.dart';
+import 'trip_history_screen.dart';
 import 'payment_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
@@ -143,6 +145,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ]),
                     Image.asset('assets/busCity4.png'),
                     SizedBox(height: 40),
+                    // Location search input
                     Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20.0),
@@ -159,6 +162,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       child: TextField(
                         focusNode: searchFocusNode,
                         readOnly: true,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const TrackBus(
+                                currentScreen: 'where to',
+                              ),
+                            ),
+                          );
+                        },
                         decoration: InputDecoration(
                           hintText: 'Where to?',
                           prefixIcon: const Icon(Icons.search),
@@ -196,38 +209,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ],
                       ),
                     ),
-                    SizedBox(height: 20),
-                    Column(
-                      children: [
-                        _buildTile(
-                          FontAwesomeIcons.bus,
-                          text: 'Track bus',
-                          onTap: () {
-                            ref
-                                .read(currentScreenStateProvider.notifier)
-                                .state = ScreenState.searchBus;
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) => const TrackBus(
-                                        currentScreen: 'track bus',
-                                      )),
-                            );
-                          },
-                        ),
-                        _buildTile(
-                          FontAwesomeIcons.creditCard,
-                          text: 'Pay now',
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) => PaymentScreen()),
-                            );
-                          },
-                        ),
-                      ],
+                    // Action Buttons Column
+                    const SizedBox(height: 20),
+                    _buildTile(
+                      FontAwesomeIcons.bus,
+                      text: 'Track bus',
+                      onTap: () {
+                        ref.read(currentScreenStateProvider.notifier).state =
+                            ScreenState.searchBus;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => const TrackBus(
+                                    currentScreen: 'track bus',
+                                  )),
+                        );
+                      },
                     ),
+                                _buildTile(
+                      FontAwesomeIcons.clockRotateLeft,
+                      text: 'Trip History',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => const TripHistoryScreen()),
+                        );
+                      },
+                    ),
+                    
+                    // Company Selection Button
+                    _buildTile(
+                      FontAwesomeIcons.building,
+                      text: 'Company',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  const SelectProviderScreen()),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 50), // Extra space at bottom
                   ],
                 ),
               ),
